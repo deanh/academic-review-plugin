@@ -1,0 +1,24 @@
+{
+  "name": "academic-review",
+  "description": "Privacy-preserving academic PDF review skill. Extract and review lectures, research papers, and book chapters with LaTeX formula support. All processing happens locally - PDFs never uploaded.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Harry Hudson",
+    "email": "your-email@example.com"
+  },
+  "homepage": "https://github.com/YOUR-USERNAME/academic-review-plugin",
+  "repository": "https://github.com/YOUR-USERNAME/academic-review-plugin",
+  "license": "MIT",
+  "keywords": [
+    "education",
+    "research",
+    "pdf",
+    "latex",
+    "study",
+    "lecture",
+    "paper",
+    "academic",
+    "review",
+    "quiz"
+  ]
+}

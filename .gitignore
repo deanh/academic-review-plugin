@@ -1,0 +1,28 @@
+# Python virtual environment
+.venv/
+venv/
+ENV/
+
+# Academic review skill caches
+.cache/
+
+# User PDFs (don't commit user's academic materials)
+*.pdf
+papers/
+lectures/
+textbooks/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
