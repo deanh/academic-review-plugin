@@ -29,12 +29,8 @@ This plugin processes PDFs **locally on your machine**. The Marker AI models (~2
 ### Install the Plugin
 
 ```bash
-# Method 1: Install directly from GitHub
-/plugin install academic-review@github.com/YOUR-USERNAME/academic-review-plugin
-
-# Method 2: Add to marketplace first
-/plugin marketplace add YOUR-USERNAME/academic-review-plugin
-/plugin install academic-review
+# Install directly from GitHub
+/plugin install academic-review@github.com/deanh/academic-review-plugin
 ```
 
 ### Install Python Dependencies
@@ -264,10 +260,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ## Support
 
-- **Issues**: [GitHub Issues](https://github.com/YOUR-USERNAME/academic-review-plugin/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/YOUR-USERNAME/academic-review-plugin/discussions)
+- **Issues**: [GitHub Issues](https://github.com/deanh/academic-review-plugin/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/deanh/academic-review-plugin/discussions)
 - **Claude Code Docs**: [code.claude.com/docs](https://code.claude.com/docs)
-
----
-
-**Note**: Replace `YOUR-USERNAME` with your GitHub username before publishing.
