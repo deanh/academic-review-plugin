@@ -6,8 +6,8 @@
     "name": "Harry Hudson",
     "email": "your-email@example.com"
   },
-  "homepage": "https://github.com/YOUR-USERNAME/academic-review-plugin",
-  "repository": "https://github.com/YOUR-USERNAME/academic-review-plugin",
+  "homepage": "https://github.com/deanh/academic-review-plugin",
+  "repository": "https://github.com/deanh/academic-review-plugin",
   "license": "MIT",
   "keywords": [
     "education",

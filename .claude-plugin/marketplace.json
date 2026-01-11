@@ -1,0 +1,18 @@
+{
+  "name": "deanh-academic-review",
+  "owner": {
+    "name": "Dean Hudson",
+    "email": "your-email@example.com"
+  },
+  "metadata": {
+    "description": "Academic PDF review tools with privacy-preserving local processing"
+  },
+  "plugins": [
+    {
+      "name": "academic-review",
+      "source": "./",
+      "description": "Privacy-preserving academic PDF review skill. Extract and review lectures, research papers, and book chapters with LaTeX formula support.",
+      "version": "1.0.0"
+    }
+  ]
+}
