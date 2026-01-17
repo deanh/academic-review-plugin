@@ -1,0 +1,46 @@
+[Unit]
+Description=Academic Quiz Flask Server
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/quizzes
+Environment="PATH=/var/www/quizzes/venv/bin"
+ExecStart=/var/www/quizzes/venv/bin/python server.py
+Restart=always
+RestartSec=5
+
+# Logging
+StandardOutput=append:/var/log/quiz-server/access.log
+StandardError=append:/var/log/quiz-server/error.log
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/var/www/quizzes/results /var/www/quizzes/data
+
+[Install]
+WantedBy=multi-user.target
+
+# Installation:
+#   1. Create log directory:
+#      sudo mkdir -p /var/log/quiz-server
+#      sudo chown www-data:www-data /var/log/quiz-server
+#
+#   2. Set up Python venv on server:
+#      cd /var/www/quizzes
+#      python3 -m venv venv
+#      ./venv/bin/pip install flask
+#
+#   3. Install and enable service:
+#      sudo cp quiz-server.service /etc/systemd/system/
+#      sudo systemctl daemon-reload
+#      sudo systemctl enable quiz-server
+#      sudo systemctl start quiz-server
+#
+#   4. Check status:
+#      sudo systemctl status quiz-server
+#      sudo journalctl -u quiz-server -f

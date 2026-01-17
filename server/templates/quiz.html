@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>{{ quiz.topic }} - Quiz</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container quiz-container">
+        <header class="quiz-header-bar">
+            <a href="{{ url_for('index') }}" class="back-btn">&larr;</a>
+            <div class="quiz-info">
+                <span class="lecture-badge">{{ quiz.lecture }}</span>
+                <span class="progress" id="progress">1 / {{ quiz.questions|length }}</span>
+            </div>
+            <div class="timer" id="timer">0:00</div>
+        </header>
+
+        <main class="quiz-main">
+            <div id="quiz-content">
+                <!-- Questions rendered by JS -->
+            </div>
+        </main>
+
+        <footer class="quiz-footer">
+            <button id="prev-btn" class="nav-btn" disabled>Previous</button>
+            <button id="next-btn" class="nav-btn primary">Next</button>
+            <button id="submit-btn" class="nav-btn submit hidden">Submit</button>
+        </footer>
+    </div>
+
+    <!-- Results Modal -->
+    <div id="results-modal" class="modal hidden">
+        <div class="modal-content">
+            <h2>Quiz Complete!</h2>
+            <div class="score-display">
+                <span class="score" id="final-score">0</span>
+                <span class="total">/ {{ quiz.questions|length }}</span>
+            </div>
+            <div class="percentage" id="final-percentage">0%</div>
+            <a href="{{ url_for('index') }}" class="btn primary">Back to Quizzes</a>
+        </div>
+    </div>
+
+    <script>
+        // Quiz data from server
+        const quizData = {{ quiz | tojson | safe }};
+    </script>
+    <script src="{{ url_for('static', filename='quiz.js') }}"></script>
+</body>
+</html>

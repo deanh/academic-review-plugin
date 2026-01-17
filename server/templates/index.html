@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Academic Quizzes</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Academic Quizzes</h1>
+        </header>
+
+        <main>
+            {% if courses %}
+            <div class="course-list">
+                {% for course_name, course in courses.items() %}
+                <details class="course-section" open>
+                    <summary class="course-header">
+                        <span class="course-name">{{ course_name }}</span>
+                        <span class="course-progress">{{ course.completed }}/{{ course.total }}</span>
+                    </summary>
+                    <div class="lectures">
+                        {% for lecture_name, lecture in course.lectures.items() %}
+                        <details class="lecture-section" {% if lecture.completed < lecture.total %}open{% endif %}>
+                            <summary class="lecture-header">
+                                <span class="lecture-name">{{ lecture_name }}</span>
+                                <span class="lecture-progress {% if lecture.completed == lecture.total %}complete{% endif %}">
+                                    {{ lecture.completed }}/{{ lecture.total }}
+                                </span>
+                            </summary>
+                            <ul class="quiz-list">
+                                {% for quiz in lecture.quizzes %}
+                                <li class="quiz-item {% if quiz.completed %}completed{% endif %}">
+                                    <a href="{{ url_for('take_quiz', quiz_id=quiz.id) }}">
+                                        <span class="quiz-topic">{{ quiz.topic }}</span>
+                                        <span class="quiz-meta">
+                                            <span class="question-count">{{ quiz.num_questions }}q</span>
+                                            {% if quiz.completed %}
+                                            <span class="status-check">Done</span>
+                                            {% endif %}
+                                        </span>
+                                    </a>
+                                </li>
+                                {% endfor %}
+                            </ul>
+                        </details>
+                        {% endfor %}
+                    </div>
+                </details>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <p>No quizzes available yet.</p>
+                <p class="hint">Generate quizzes using Claude and sync them to the server.</p>
+            </div>
+            {% endif %}
+        </main>
+    </div>
+</body>
+</html>

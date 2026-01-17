@@ -1,0 +1,10 @@
+# Quiz data (synced from local machine)
+data/*.json
+
+# Quiz results (synced to local machine)
+results/*.json
+
+# Python
+venv/
+__pycache__/
+*.pyc

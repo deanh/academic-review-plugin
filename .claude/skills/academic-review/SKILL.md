@@ -281,6 +281,362 @@ Your actions:
 - Short answer: 1 point if answer captures key concept (be flexible)
 - Formula problems: 1 point for correct answer, 0.5 for correct approach but calculation error
 
+### Quiz Logging
+
+**IMPORTANT**: At the end of every quiz, **automatically create a log file** without prompting.
+
+**File location**: `.cache/quiz-logs/YYYY-MM-DD_pcv{N}_{topic}.md`
+
+Example: `.cache/quiz-logs/2026-01-13_pcv05_DLT.md`
+
+**During the quiz, track**:
+- Which slide/page each question sources from (use `_page_N_` markers in extracted content)
+- Student's reasoning when provided
+- Specific knowledge gaps revealed by incorrect answers
+
+**Log file structure**:
+
+1. **YAML frontmatter**: date, lecture number, topic, source PDF path, cache hash, score, percentage
+2. **Performance summary table**: score, grade, date
+3. **Mastered topics table**: topic, question numbers, slide references, notes on understanding
+4. **Topics needing review table**: topic, question numbers, slide references, specific knowledge gap
+5. **Question-by-question detail**: Full detail for each question, especially reasoning and gaps for incorrect answers
+6. **Study recommendations**: Prioritized list for next session
+7. **Machine-readable metadata block**: YAML block with topics_covered, weak_topics, strong_topics arrays
+
+**Slide reference format**:
+- Extract page number from `_page_N_` markers in the cached markdown
+- Reference as "Slide N" or "Slides N-M" for ranges
+- Include content description (e.g., "Slide 3, transformation DOF table")
+
+**Example log file**:
+
+```markdown
+---
+date: 2026-01-13
+lecture: pcv05
+topic: Direct Linear Transformation (DLT)
+source_pdf: lectures/PCV/pcv05_WS2526_DLT.pdf
+cache_hash: c57edf3d7baf5f7d
+score: 9/10
+percentage: 90
+grade: A
+---
+
+# Quiz Log: PCV Lecture 5 - DLT
+
+## Performance Summary
+| Metric | Value |
+|--------|-------|
+| Score | 9/10 (90%) |
+| Grade | A |
+| Date | 2026-01-13 |
+
+## Topics Assessed
+
+### Mastered Topics
+| Topic | Questions | Slide References | Notes |
+|-------|-----------|------------------|-------|
+| Degrees of freedom | Q1 | Slide 3 (transformation table) | Understood 8 DOF = 9 elements - 1 scale |
+| Point requirements | Q2 | Slides 16-17 | 4 points for 2D homography |
+
+### Topics Needing Review
+| Topic | Questions | Slide References | Specific Gap |
+|-------|-----------|------------------|--------------|
+| Conic transformation | Q8 | Slide 7 | Formula: C' = H^{-T}CH^{-1} |
+
+## Question-by-Question Detail
+
+### Q1: Degrees of Freedom [CORRECT]
+- **Topic**: 2D transformation properties
+- **Slide**: 3
+- **Answer**: c) 8
+- **Student reasoning**: "3x3 minus one for scaling"
+- **Assessment**: Full understanding demonstrated
+
+### Q8: Conic Transformation [INCORRECT]
+- **Topic**: Transformation of geometric primitives
+- **Slide**: 7
+- **Correct answer**: C' = H^{-T}CH^{-1}
+- **Student response**: "I'm not sure how conics are transformed"
+- **Recommended review**: Review derivation from point incidence x^T C x = 0
+
+## Study Recommendations for Next Session
+1. **Priority**: Conic transformation formula and derivation
+2. **Related topics to reinforce**: Dual conics (C*' = HC*H^T)
+
+## Metadata for Future Processing
+```yaml
+session_type: quiz
+question_count: 10
+correct_count: 9
+topics_covered:
+  - degrees_of_freedom
+  - point_requirements
+  - conic_transformation
+weak_topics:
+  - conic_transformation
+strong_topics:
+  - degrees_of_freedom
+  - point_requirements
+```
+```
+
+**Purpose**: These logs enable future Claude instances to:
+- Identify persistent weak areas across multiple sessions
+- Recommend focused review before exams
+- Track learning velocity and mastery progression
+- Generate personalized study plans based on history
+
+## Web Quiz System
+
+The web quiz system allows pre-generating quizzes that can be taken on mobile devices (iPhone via Safari), with results synced back for Claude-assisted review.
+
+### Architecture Overview
+
+```
+LOCAL                          SERVER                    MOBILE
+─────────────────────────────────────────────────────────────────
+Claude generates    rsync      Flask serves     Safari
+quiz JSON files ──────────▶   quizzes      ◀─────────── iPhone
+                                   │
+.cache/web-quizzes/                │
+                                   ▼
+Claude reads       rsync      Results saved
+results for    ◀──────────   as JSON files
+review
+.cache/quiz-results/
+```
+
+### Generating Web Quizzes
+
+When user requests web quizzes, generate JSON files in `.cache/web-quizzes/`.
+
+**File naming**: `{lecture}_{topic}_{date}.json`
+Example: `pcv05_dlt_2026-01-14.json`
+
+**Important**: Use zero-padded lecture numbers for single digits (pcv01-pcv09, not pcv1-pcv9). This ensures correct alphabetical sorting in file listings and the web UI.
+
+**Quiz JSON Format** (IMPORTANT - use this exact structure):
+
+```json
+{
+  "id": "pcv05_dlt_2026-01-14",
+  "lecture": "pcv05",
+  "topic": "Direct Linear Transformation",
+  "source_pdf": "lectures/PCV/pcv05_WS2526_DLT.pdf",
+  "cache_hash": "c57edf3d7baf5f7d",
+  "created": "2026-01-14T10:30:00Z",
+  "questions": [
+    {
+      "id": "q1",
+      "type": "multiple_choice",
+      "question": "How many DOF does a 2D projectivity have?",
+      "options": ["4", "6", "8", "9"],
+      "correct": 2,
+      "slide_ref": "Slide 3",
+      "topic": "degrees_of_freedom"
+    },
+    {
+      "id": "q2",
+      "type": "true_false",
+      "question": "The DLT algorithm requires iterative optimization.",
+      "correct": false,
+      "slide_ref": "Slide 14",
+      "topic": "dlt_properties"
+    },
+    {
+      "id": "q3",
+      "type": "short_answer",
+      "question": "How are lines transformed under a homography H?",
+      "expected_keywords": ["H^{-T}", "inverse transpose", "H^-T"],
+      "slide_ref": "Slide 7",
+      "topic": "line_transformation"
+    }
+  ]
+}
+```
+
+**Question types**:
+- `multiple_choice`: Include `options` array and `correct` (0-indexed)
+- `true_false`: Include `correct` as boolean
+- `short_answer`: Include `expected_keywords` array for partial matching
+
+**Guidelines for generating questions**:
+- Include 10-15 questions per quiz
+- Mix question types (60% MC, 20% T/F, 20% short answer)
+- Reference specific slides using `slide_ref`
+- Tag each question with a `topic` for tracking
+- **IMPORTANT**: Randomize correct answer positions (see utility below)
+- Use ASCII for formulas in questions (e.g., "H^{-T}" not LaTeX)
+
+### Answer Randomization Utility
+
+To prevent answer position bias, use `scripts/quiz_utils.py` when generating multiple choice questions:
+
+```python
+from scripts.quiz_utils import shuffle_options, create_mc_question
+
+# Method 1: Shuffle existing options
+options = ["4", "6", "8", "9"]  # correct answer is "8" at index 2
+shuffled, new_correct_idx = shuffle_options(options, correct_index=2)
+
+# Method 2: Create question with automatic shuffling
+question = create_mc_question(
+    question="How many DOF does a 2D homography have?",
+    correct="8",
+    distractors=["4", "6", "9"],
+    id="q1",
+    topic="degrees_of_freedom",
+    slide_ref="Slide 3"
+)
+# Returns dict with shuffled options and correct index
+```
+
+**Always use one of these methods** - never manually place correct answers, as this leads to positional bias (e.g., correct answer always in position B).
+
+### Reading Quiz Results
+
+After user takes quizzes and syncs results, read from `.cache/quiz-results/`.
+
+**Result JSON Format** (server generates this):
+
+```json
+{
+  "quiz_id": "pcv05_dlt_2026-01-14",
+  "completed": "2026-01-14T14:22:00Z",
+  "score": 8,
+  "total": 10,
+  "percentage": 80,
+  "total_time_sec": 180,
+  "answers": [
+    {
+      "question_id": "q1",
+      "topic": "degrees_of_freedom",
+      "slide_ref": "Slide 3",
+      "type": "multiple_choice",
+      "selected": 2,
+      "correct_index": 2,
+      "is_correct": true,
+      "time_spent_sec": 15
+    },
+    {
+      "question_id": "q2",
+      "topic": "dlt_properties",
+      "slide_ref": "Slide 14",
+      "type": "true_false",
+      "selected": true,
+      "correct_value": false,
+      "is_correct": false,
+      "time_spent_sec": 8
+    },
+    {
+      "question_id": "q3",
+      "topic": "line_transformation",
+      "slide_ref": "Slide 7",
+      "type": "short_answer",
+      "text": "l' = H^-T @ l",
+      "keywords_found": 2,
+      "keywords_expected": 3,
+      "is_correct": true,
+      "time_spent_sec": 25
+    }
+  ]
+}
+```
+
+### Reviewing Web Quiz Results
+
+When user asks to review web quiz results:
+
+1. Read result files from `.cache/quiz-results/`
+2. Cross-reference with original quiz JSON to get full question text
+3. Analyze patterns:
+   - Which topics had incorrect answers?
+   - How much time spent on each question?
+   - Compare with previous quiz logs for recurring weak areas
+4. Generate study recommendations based on missed questions
+5. Offer focused review on weak topics
+
+**Example review workflow**:
+```
+User: "Review my web quiz results"
+
+Claude:
+1. Glob .cache/quiz-results/*.json
+2. Read each result file
+3. Load corresponding quiz from .cache/web-quizzes/
+4. Summarize performance
+5. Identify weak topics across multiple quizzes
+6. Suggest focused review or generate follow-up quiz
+```
+
+### Sync Commands
+
+**Push quizzes to server**:
+```bash
+./scripts/sync_quizzes.sh
+```
+
+**Pull results from server**:
+```bash
+./scripts/sync_results.sh
+```
+
+Note: User must configure server credentials in these scripts.
+
+### Quiz Validation
+
+Before deploying quizzes to the web server, validate them with:
+
+```bash
+./scripts/validate_quizzes.py
+```
+
+This validates all quiz JSON files in `server/data/` against the expected format:
+
+**Quiz-level validation:**
+- Required fields: `id`, `lecture`, `topic`, `questions`
+- ID matches filename
+- Valid lecture format
+
+**Question-level validation:**
+- Required fields: `id`, `type`, `question`
+- Valid question types: `multiple_choice`, `true_false`, `short_answer`
+- Type-specific requirements:
+  - Multiple choice: `options` array (2-6 items), `correct` index in range
+  - True/false: `correct` as boolean
+  - Short answer: `expected_keywords` array (non-empty)
+- No duplicate question IDs
+
+**Example output:**
+```
+Quiz Validation Report
+==================================================
+
+✓ All 96 quizzes are valid!
+
+Statistics:
+  Total quizzes:     96
+  Valid quizzes:     96
+  Total questions:   960
+  Multiple choice:   633 (65.9%)
+  True/False:        231 (24.1%)
+  Short answer:      96 (10.0%)
+```
+
+Run this after generating or modifying quizzes to catch formatting errors before they cause server issues.
+
+### Quiz Status
+
+Check which lectures have quizzes and how many:
+
+```bash
+./scripts/quiz_status.sh
+```
+
+Shows quiz coverage per lecture with counts and identifies lectures missing quizzes.
+
 ## Finding PDFs
 
 **General patterns:**
@@ -303,9 +659,31 @@ glob pattern: "CS229/**/*.pdf"
 
 ## Extraction and Caching
 
+### Checking the Cache First
+
+**IMPORTANT**: Before running the extraction script, always check if the PDF is already cached:
+
+```bash
+# List all cached metadata files to find source PDFs
+for f in .cache/extracted/*.json; do cat "$f" | head -5; done
+```
+
+Or search for a specific PDF:
+```bash
+grep -l "pcv10" .cache/extracted/*.json
+```
+
+Each `.json` file contains the source PDF path and hash. If found, read the corresponding `.md` file directly:
+```bash
+# If pcv10 has hash f2c4d6104b10076b:
+Read .cache/extracted/f2c4d6104b10076b.md
+```
+
+This avoids unnecessary extraction and speeds up sessions.
+
 ### First-Time Extraction
 
-When extracting a PDF for the first time:
+When extracting a PDF for the first time (not in cache):
 
 ```bash
 # Run extraction script (uses venv python)
