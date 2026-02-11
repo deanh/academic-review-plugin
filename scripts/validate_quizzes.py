@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """
 Quiz Validation Script
-Validates all quiz JSON files against the expected format for the web app.
+Validates question pool JSON files and checks for answer position bias.
+
+Usage: python scripts/validate_quizzes.py
 """
 
 import json
 import sys
 from pathlib import Path
-from typing import List, Tuple
 
 # ANSI colors
 RED = "\033[91m"
@@ -16,209 +17,216 @@ YELLOW = "\033[93m"
 BOLD = "\033[1m"
 RESET = "\033[0m"
 
-REQUIRED_QUIZ_FIELDS = {"id", "lecture", "topic", "questions"}
-OPTIONAL_QUIZ_FIELDS = {"source_pdf", "created"}
-
 REQUIRED_QUESTION_FIELDS = {"id", "type", "question"}
-OPTIONAL_QUESTION_FIELDS = {"topic", "slide_ref"}
+VALID_QUESTION_TYPES = {"multiple_choice", "true_false"}
 
-VALID_QUESTION_TYPES = {"multiple_choice", "true_false", "short_answer"}
+BIAS_THRESHOLD = 0.40  # Warn if any position has > 40% of correct answers
 
 
-def validate_question(q: dict, quiz_id: str, q_idx: int) -> List[str]:
+def validate_question(q: dict, file_name: str, q_idx: int):
     """Validate a single question. Returns list of error messages."""
     errors = []
-    prefix = f"Quiz '{quiz_id}', Question {q_idx + 1}"
+    prefix = f"{file_name}, Q{q_idx + 1} ({q.get('id', '?')})"
 
-    # Check required fields
     for field in REQUIRED_QUESTION_FIELDS:
         if field not in q:
             errors.append(f"{prefix}: Missing required field '{field}'")
 
     if "type" not in q:
-        return errors  # Can't validate further without type
+        return errors
 
     q_type = q["type"]
 
-    # Check valid question type
     if q_type not in VALID_QUESTION_TYPES:
-        errors.append(f"{prefix}: Invalid question type '{q_type}'. Must be one of {VALID_QUESTION_TYPES}")
+        errors.append(f"{prefix}: Invalid type '{q_type}'. Must be one of {VALID_QUESTION_TYPES}")
         return errors
 
-    # Type-specific validation
     if q_type == "multiple_choice":
         if "options" not in q:
-            errors.append(f"{prefix}: Multiple choice question missing 'options' array")
+            errors.append(f"{prefix}: Missing 'options' array")
         elif not isinstance(q["options"], list):
             errors.append(f"{prefix}: 'options' must be an array")
         elif len(q["options"]) < 2:
-            errors.append(f"{prefix}: Multiple choice needs at least 2 options, has {len(q['options'])}")
+            errors.append(f"{prefix}: Needs at least 2 options, has {len(q['options'])}")
         elif len(q["options"]) > 6:
-            errors.append(f"{prefix}: Multiple choice has {len(q['options'])} options (recommend 4)")
+            errors.append(f"{prefix}: Has {len(q['options'])} options (max 6)")
 
         if "correct" not in q:
-            errors.append(f"{prefix}: Multiple choice question missing 'correct' index")
+            errors.append(f"{prefix}: Missing 'correct' index")
         elif not isinstance(q["correct"], int):
-            errors.append(f"{prefix}: 'correct' must be an integer index, got {type(q['correct']).__name__}")
+            errors.append(f"{prefix}: 'correct' must be int, got {type(q['correct']).__name__}")
         elif "options" in q and isinstance(q["options"], list):
             if q["correct"] < 0 or q["correct"] >= len(q["options"]):
                 errors.append(f"{prefix}: 'correct' index {q['correct']} out of range for {len(q['options'])} options")
 
     elif q_type == "true_false":
         if "correct" not in q:
-            errors.append(f"{prefix}: True/false question missing 'correct' value")
+            errors.append(f"{prefix}: Missing 'correct' value")
         elif not isinstance(q["correct"], bool):
-            errors.append(f"{prefix}: True/false 'correct' must be boolean, got {type(q['correct']).__name__}")
+            errors.append(f"{prefix}: 'correct' must be boolean, got {type(q['correct']).__name__}")
 
-    elif q_type == "short_answer":
-        if "expected_keywords" not in q:
-            errors.append(f"{prefix}: Short answer question missing 'expected_keywords' array")
-        elif not isinstance(q["expected_keywords"], list):
-            errors.append(f"{prefix}: 'expected_keywords' must be an array")
-        elif len(q["expected_keywords"]) == 0:
-            errors.append(f"{prefix}: 'expected_keywords' is empty")
-
-    # Check question text is non-empty
     if "question" in q and (not q["question"] or not q["question"].strip()):
         errors.append(f"{prefix}: Question text is empty")
 
     return errors
 
 
-def validate_quiz(filepath: Path) -> Tuple[bool, List[str], dict]:
-    """
-    Validate a quiz file.
-    Returns: (is_valid, error_messages, stats_dict)
-    """
-    errors = []
-    stats = {"questions": 0, "mc": 0, "tf": 0, "sa": 0}
+def check_position_bias(position_counts: dict, total_mc: int):
+    """Check for answer position bias. Returns list of warnings."""
+    warnings = []
+    if total_mc < 10:
+        return warnings
 
-    try:
-        with open(filepath) as f:
-            quiz = json.load(f)
-    except json.JSONDecodeError as e:
-        return False, [f"Invalid JSON: {e}"], stats
+    for pos, count in sorted(position_counts.items()):
+        ratio = count / total_mc
+        if ratio > BIAS_THRESHOLD:
+            warnings.append(
+                f"Position {pos} has {count}/{total_mc} correct answers "
+                f"({ratio:.0%}) - exceeds {BIAS_THRESHOLD:.0%} threshold"
+            )
 
-    quiz_id = filepath.stem
-
-    # Check required fields
-    for field in REQUIRED_QUIZ_FIELDS:
-        if field not in quiz:
-            errors.append(f"Quiz '{quiz_id}': Missing required field '{field}'")
-
-    # Validate quiz ID matches filename
-    if "id" in quiz and quiz["id"] != quiz_id:
-        errors.append(f"Quiz '{quiz_id}': ID in file ('{quiz['id']}') doesn't match filename")
-
-    # Validate lecture format (should be like 'pcv5', 'pcv15', etc.)
-    if "lecture" in quiz:
-        lecture = quiz["lecture"]
-        if not lecture or not lecture[0].isalpha():
-            errors.append(f"Quiz '{quiz_id}': Invalid lecture format '{lecture}'")
-
-    # Validate questions
-    if "questions" not in quiz:
-        return len(errors) == 0, errors, stats
-
-    questions = quiz["questions"]
-    if not isinstance(questions, list):
-        errors.append(f"Quiz '{quiz_id}': 'questions' must be an array")
-        return False, errors, stats
-
-    stats["questions"] = len(questions)
-
-    if len(questions) == 0:
-        errors.append(f"Quiz '{quiz_id}': No questions in quiz")
-    elif len(questions) < 5:
-        errors.append(f"Quiz '{quiz_id}': Only {len(questions)} questions (recommend 10+)")
-
-    # Check for duplicate question IDs
-    q_ids = [q.get("id") for q in questions if "id" in q]
-    if len(q_ids) != len(set(q_ids)):
-        errors.append(f"Quiz '{quiz_id}': Duplicate question IDs detected")
-
-    # Validate each question
-    for idx, q in enumerate(questions):
-        q_errors = validate_question(q, quiz_id, idx)
-        errors.extend(q_errors)
-
-        # Count question types
-        q_type = q.get("type", "")
-        if q_type == "multiple_choice":
-            stats["mc"] += 1
-        elif q_type == "true_false":
-            stats["tf"] += 1
-        elif q_type == "short_answer":
-            stats["sa"] += 1
-
-    return len(errors) == 0, errors, stats
+    return warnings
 
 
 def main():
-    data_dir = Path(__file__).parent.parent / "server" / "data"
+    questions_dir = Path(__file__).parent.parent / "server" / "data" / "questions"
 
-    if not data_dir.exists():
-        print(f"{RED}Error: Data directory not found: {data_dir}{RESET}")
+    if not questions_dir.exists():
+        print(f"{RED}Error: Questions directory not found: {questions_dir}{RESET}")
         sys.exit(1)
 
-    quiz_files = sorted(data_dir.glob("*.json"))
+    # Find all question pool files across all courses
+    pool_files = sorted(questions_dir.glob("**/*.json"))
 
-    if not quiz_files:
-        print(f"{YELLOW}No quiz files found in {data_dir}{RESET}")
+    if not pool_files:
+        print(f"{YELLOW}No question files found in {questions_dir}{RESET}")
         sys.exit(0)
 
-    print(f"{BOLD}Quiz Validation Report{RESET}")
+    print(f"{BOLD}Question Pool Validation Report{RESET}")
     print("=" * 50)
     print()
 
-    total_quizzes = 0
-    valid_quizzes = 0
+    total_files = 0
+    valid_files = 0
     total_questions = 0
     total_mc = 0
     total_tf = 0
-    total_sa = 0
     all_errors = []
+    all_ids = set()
+    duplicate_ids = []
 
-    for filepath in quiz_files:
-        is_valid, errors, stats = validate_quiz(filepath)
-        total_quizzes += 1
-        total_questions += stats["questions"]
-        total_mc += stats["mc"]
-        total_tf += stats["tf"]
-        total_sa += stats["sa"]
+    # Global position bias tracking
+    position_counts = {0: 0, 1: 0, 2: 0, 3: 0}
+    # Per-file position tracking
+    per_file_positions = {}
 
-        if is_valid:
-            valid_quizzes += 1
+    for filepath in pool_files:
+        total_files += 1
+        file_name = f"{filepath.parent.name}/{filepath.name}"
+        file_errors = []
+        file_positions = {0: 0, 1: 0, 2: 0, 3: 0}
+        file_mc = 0
+
+        try:
+            with open(filepath) as f:
+                questions = json.load(f)
+        except json.JSONDecodeError as e:
+            all_errors.append(f"{file_name}: Invalid JSON: {e}")
+            continue
+
+        if not isinstance(questions, list):
+            all_errors.append(f"{file_name}: Must be a JSON array of questions")
+            continue
+
+        if len(questions) == 0:
+            all_errors.append(f"{file_name}: Empty question array")
+            continue
+
+        for idx, q in enumerate(questions):
+            q_errors = validate_question(q, file_name, idx)
+            file_errors.extend(q_errors)
+
+            # Track IDs for global duplicate check
+            q_id = q.get("id")
+            if q_id:
+                if q_id in all_ids:
+                    duplicate_ids.append(f"{file_name}: Duplicate ID '{q_id}'")
+                all_ids.add(q_id)
+
+            q_type = q.get("type", "")
+            if q_type == "multiple_choice":
+                total_mc += 1
+                file_mc += 1
+                correct = q.get("correct", 0)
+                if isinstance(correct, int) and 0 <= correct <= 3:
+                    position_counts[correct] += 1
+                    file_positions[correct] += 1
+            elif q_type == "true_false":
+                total_tf += 1
+
+        total_questions += len(questions)
+
+        if file_errors:
+            all_errors.extend(file_errors)
         else:
-            all_errors.extend(errors)
+            valid_files += 1
 
-    # Summary
-    if valid_quizzes == total_quizzes:
-        print(f"{GREEN}✓ All {total_quizzes} quizzes are valid!{RESET}")
+        if file_mc > 0:
+            per_file_positions[file_name] = (file_positions, file_mc)
+
+    # Print results
+    if valid_files == total_files and not duplicate_ids:
+        print(f"{GREEN}All {total_files} question files are valid!{RESET}")
     else:
-        print(f"{RED}✗ {total_quizzes - valid_quizzes}/{total_quizzes} quizzes have errors{RESET}")
+        print(f"{RED}{total_files - valid_files}/{total_files} files have errors{RESET}")
 
     print()
     print(f"{BOLD}Statistics:{RESET}")
-    print(f"  Total quizzes:     {total_quizzes}")
-    print(f"  Valid quizzes:     {valid_quizzes}")
+    print(f"  Question files:    {total_files}")
     print(f"  Total questions:   {total_questions}")
-    print(f"  Multiple choice:   {total_mc} ({total_mc/total_questions*100:.1f}%)" if total_questions else "")
-    print(f"  True/False:        {total_tf} ({total_tf/total_questions*100:.1f}%)" if total_questions else "")
-    print(f"  Short answer:      {total_sa} ({total_sa/total_questions*100:.1f}%)" if total_questions else "")
+    if total_questions:
+        print(f"  Multiple choice:   {total_mc} ({total_mc/total_questions*100:.1f}%)")
+        print(f"  True/False:        {total_tf} ({total_tf/total_questions*100:.1f}%)")
+
+    # Position bias check
+    print()
+    print(f"{BOLD}Answer Position Distribution:{RESET}")
+    if total_mc > 0:
+        for pos in sorted(position_counts):
+            count = position_counts[pos]
+            ratio = count / total_mc
+            bar = "#" * int(ratio * 40)
+            indicator = f" {YELLOW}<--{RESET}" if ratio > BIAS_THRESHOLD else ""
+            print(f"  Position {pos}: {count:3d} ({ratio:5.1%}) {bar}{indicator}")
+
+        bias_warnings = check_position_bias(position_counts, total_mc)
+        if bias_warnings:
+            print()
+            print(f"{BOLD}{YELLOW}Answer Position Bias Detected:{RESET}")
+            for w in bias_warnings:
+                print(f"  {YELLOW}!{RESET} {w}")
+            print(f"  {YELLOW}!{RESET} Run: python scripts/fix_bias.py to shuffle answers")
+            print(f"  {YELLOW}!{RESET} Server shuffles at serving time, but source files should be fixed")
+
+    if duplicate_ids:
+        print()
+        print(f"{BOLD}{RED}Duplicate IDs:{RESET}")
+        for d in duplicate_ids[:10]:
+            print(f"  {RED}*{RESET} {d}")
 
     if all_errors:
         print()
         print(f"{BOLD}{RED}Errors:{RESET}")
-        for error in all_errors[:20]:  # Show first 20 errors
-            print(f"  {RED}•{RESET} {error}")
+        for error in all_errors[:20]:
+            print(f"  {RED}*{RESET} {error}")
         if len(all_errors) > 20:
             print(f"  ... and {len(all_errors) - 20} more errors")
 
     print()
 
-    # Exit with error code if validation failed
-    sys.exit(0 if valid_quizzes == total_quizzes else 1)
+    has_errors = valid_files < total_files or duplicate_ids
+    has_bias = bool(check_position_bias(position_counts, total_mc))
+    sys.exit(2 if has_bias else (1 if has_errors else 0))
 
 
 if __name__ == "__main__":

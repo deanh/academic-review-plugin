@@ -2,149 +2,308 @@
 """
 Quiz Server - Flask application for serving academic quizzes.
 Deploy to: /var/www/quizzes/server.py
+
+Supports:
+- Multiple courses with separate question pools
+- Quick Quiz: Random N questions from a course
+- Topic Practice: All questions for a specific topic
+- Offline caching per course
 """
 
 import json
-import os
+import random
+import uuid
 from datetime import datetime
 from pathlib import Path
 
-from flask import Flask, jsonify, render_template, request, abort
+from flask import Flask, jsonify, render_template, request, abort, redirect, url_for
 
 app = Flask(__name__)
 
 # Configuration
 DATA_DIR = Path(__file__).parent / "data"
+QUESTIONS_DIR = DATA_DIR / "questions"
 RESULTS_DIR = Path(__file__).parent / "results"
 
 # Ensure directories exist
 DATA_DIR.mkdir(exist_ok=True)
+QUESTIONS_DIR.mkdir(exist_ok=True)
 RESULTS_DIR.mkdir(exist_ok=True)
 
-
-def load_quiz(quiz_id: str) -> dict | None:
-    """Load a quiz by ID."""
-    quiz_file = DATA_DIR / f"{quiz_id}.json"
-    if quiz_file.exists():
-        with open(quiz_file) as f:
-            return json.load(f)
-    return None
-
-
-def list_quizzes() -> list[dict]:
-    """List all available quizzes."""
-    quizzes = []
-    for quiz_file in DATA_DIR.glob("*.json"):
-        try:
-            with open(quiz_file) as f:
-                quiz = json.load(f)
-                quizzes.append({
-                    "id": quiz.get("id", quiz_file.stem),
-                    "lecture": quiz.get("lecture", "Unknown"),
-                    "topic": quiz.get("topic", "Unknown"),
-                    "num_questions": len(quiz.get("questions", [])),
-                    "created": quiz.get("created", "Unknown")
-                })
-        except (json.JSONDecodeError, KeyError):
-            continue
-    # Sort by creation date, newest first
-    quizzes.sort(key=lambda x: x.get("created", ""), reverse=True)
-    return quizzes
-
-
-def extract_course(lecture: str) -> str:
-    """Extract course code from lecture string (e.g., 'pcv5' -> 'PCV')."""
-    import re
-    match = re.match(r'^([a-zA-Z]+)', lecture)
-    return match.group(1).upper() if match else "OTHER"
-
-
-def group_quizzes_by_course_and_lecture(quizzes: list[dict], completed: set[str]) -> dict:
-    """
-    Group quizzes hierarchically by course and lecture.
-    Returns: {
-        'PCV': {
-            'lectures': {
-                'pcv5': {'name': 'pcv5', 'quizzes': [...], 'completed': 2, 'total': 3},
-                ...
+# Course and topic metadata
+COURSES = {
+    "pcv": {
+        "name": "Photogrammetry & Computer Vision",
+        "short_name": "PCV",
+        "description": "TUM PCV course - multi-view geometry, camera models, reconstruction",
+        "topics": {
+            "homogeneous_2d": {
+                "name": "Homogeneous 2D Coordinates",
+                "description": "Points, lines, dual conics in 2D projective space",
+                "lectures": ["pcv3", "pcv4"]
             },
-            'completed': 5,
-            'total': 10
-        },
-        ...
-    }
-    """
-    courses = {}
-
-    for quiz in quizzes:
-        quiz["completed"] = quiz["id"] in completed
-        course = extract_course(quiz["lecture"])
-        lecture = quiz["lecture"]
-
-        if course not in courses:
-            courses[course] = {"lectures": {}, "completed": 0, "total": 0}
-
-        if lecture not in courses[course]["lectures"]:
-            courses[course]["lectures"][lecture] = {
-                "name": lecture,
-                "quizzes": [],
-                "completed": 0,
-                "total": 0
+            "transformations": {
+                "name": "Planar Transformations & Homography",
+                "description": "2D transformations, DLT algorithm, concatenation/inversion",
+                "lectures": ["pcv4", "pcv5", "pcv6"]
+            },
+            "homogeneous_3d": {
+                "name": "Homogeneous 3D & Spatial Transforms",
+                "description": "Points, planes, quadrics, spatial transformations",
+                "lectures": ["pcv7"]
+            },
+            "camera_model": {
+                "name": "Camera Model & Projection",
+                "description": "Projection matrix, interior/exterior orientation, spatial resection",
+                "lectures": ["pcv8", "pcv9"]
+            },
+            "distortion": {
+                "name": "Distortion & Aberrations",
+                "description": "Radial distortion, lens aberrations, calibration",
+                "lectures": ["pcv10"]
+            },
+            "epipolar": {
+                "name": "Epipolar Geometry",
+                "description": "Fundamental matrix, essential matrix, 8-point algorithm",
+                "lectures": ["pcv11", "pcv12"]
+            },
+            "triangulation": {
+                "name": "Triangulation & Reconstruction",
+                "description": "Spatial intersection, stereo normal case, projective reconstruction",
+                "lectures": ["pcv13"]
+            },
+            "trifocal": {
+                "name": "Trifocal Geometry",
+                "description": "Trifocal tensor, point/line transfer, tensor estimation",
+                "lectures": ["pcv14", "pcv15"]
+            },
+            "bundle_adjustment": {
+                "name": "Bundle Adjustment",
+                "description": "Nonlinear optimization, Jacobian structure, sparse systems",
+                "lectures": ["pcv17", "pcv19"]
+            },
+            "calibration": {
+                "name": "Calibration & Self-Calibration",
+                "description": "Absolute conic, Kruppa equations, DAQ",
+                "lectures": ["pcv18", "pcv20"]
+            },
+            "robust_estimation": {
+                "name": "Robust Estimation",
+                "description": "RANSAC, M-estimators, LMedS",
+                "lectures": ["pcv21"]
+            },
+            "dof_redundancy": {
+                "name": "DOF & Redundancy Drill",
+                "description": "Degrees of freedom, constraints, and parameterization across all topics",
+                "lectures": ["pcv3", "pcv4", "pcv5", "pcv7", "pcv8", "pcv11", "pcv12", "pcv14", "pcv17", "pcv18"]
             }
-
-        courses[course]["lectures"][lecture]["quizzes"].append(quiz)
-        courses[course]["lectures"][lecture]["total"] += 1
-        courses[course]["total"] += 1
-
-        if quiz["completed"]:
-            courses[course]["lectures"][lecture]["completed"] += 1
-            courses[course]["completed"] += 1
-
-    # Sort lectures within each course by lecture number
-    for course in courses.values():
-        course["lectures"] = dict(
-            sorted(course["lectures"].items(),
-                   key=lambda x: (x[0], x[1]["quizzes"][0]["created"] if x[1]["quizzes"] else ""))
-        )
-
-    # Sort courses alphabetically
-    return dict(sorted(courses.items()))
-
-
-def get_completed_quizzes() -> set[str]:
-    """Get set of quiz IDs that have been completed."""
-    completed = set()
-    for result_file in RESULTS_DIR.glob("*_result.json"):
-        # Extract quiz_id from filename (e.g., "pcv5_dlt_result.json" -> "pcv5_dlt")
-        quiz_id = result_file.stem.replace("_result", "")
-        completed.add(quiz_id)
-    return completed
-
-
-@app.route("/")
-def index():
-    """List all available quizzes grouped by course and lecture."""
-    quizzes = list_quizzes()
-    completed = get_completed_quizzes()
-    courses = group_quizzes_by_course_and_lecture(quizzes, completed)
-    return render_template("index.html", courses=courses)
-
-
-@app.route("/quiz/<quiz_id>")
-def take_quiz(quiz_id: str):
-    """Render the quiz-taking interface."""
-    quiz = load_quiz(quiz_id)
-    if not quiz:
-        abort(404, description="Quiz not found")
-
-    # Remove correct answers from questions sent to client
-    client_quiz = {
-        "id": quiz["id"],
-        "lecture": quiz.get("lecture", ""),
-        "topic": quiz.get("topic", ""),
-        "questions": []
+        }
     }
-    for q in quiz.get("questions", []):
+}
+
+
+def get_course_dir(course_id: str) -> Path:
+    """Get the questions directory for a course."""
+    return QUESTIONS_DIR / course_id
+
+
+def load_questions_for_topic(course_id: str, topic_id: str) -> list:
+    """Load all questions for a specific topic in a course."""
+    topic_file = get_course_dir(course_id) / f"{topic_id}.json"
+    if topic_file.exists():
+        with open(topic_file) as f:
+            return json.load(f)
+    return []
+
+
+def load_all_questions_for_course(course_id: str) -> dict:
+    """Load all questions from all topic files in a course."""
+    course_dir = get_course_dir(course_id)
+    all_questions = {}
+    if not course_dir.exists():
+        return all_questions
+    for topic_file in course_dir.glob("*.json"):
+        topic_id = topic_file.stem
+        try:
+            with open(topic_file) as f:
+                questions = json.load(f)
+                all_questions[topic_id] = questions
+        except (json.JSONDecodeError, IOError):
+            continue
+    return all_questions
+
+
+def get_topics_with_counts(course_id: str) -> list:
+    """Get list of topics with question counts for a course."""
+    course = COURSES.get(course_id)
+    if not course:
+        return []
+
+    course_dir = get_course_dir(course_id)
+    topics = []
+
+    for topic_file in course_dir.glob("*.json"):
+        topic_id = topic_file.stem
+        try:
+            with open(topic_file) as f:
+                questions = json.load(f)
+                info = course["topics"].get(topic_id, {})
+                topics.append({
+                    "id": topic_id,
+                    "name": info.get("name", topic_id.replace("_", " ").title()),
+                    "description": info.get("description", ""),
+                    "lectures": info.get("lectures", []),
+                    "count": len(questions)
+                })
+        except (json.JSONDecodeError, IOError):
+            continue
+
+    # Sort by lecture number (first lecture in list)
+    topics.sort(key=lambda t: t.get("lectures", ["zzz"])[0])
+    return topics
+
+
+def get_total_question_count(course_id: str) -> int:
+    """Get total number of questions in a course."""
+    course_dir = get_course_dir(course_id)
+    total = 0
+    if not course_dir.exists():
+        return 0
+    for topic_file in course_dir.glob("*.json"):
+        try:
+            with open(topic_file) as f:
+                questions = json.load(f)
+                total += len(questions)
+        except (json.JSONDecodeError, IOError):
+            continue
+    return total
+
+
+def get_courses_with_counts() -> list:
+    """Get list of all courses with question counts."""
+    courses = []
+    for course_id, course_info in COURSES.items():
+        count = get_total_question_count(course_id)
+        if count > 0:  # Only show courses that have questions
+            courses.append({
+                "id": course_id,
+                "name": course_info["name"],
+                "short_name": course_info["short_name"],
+                "description": course_info["description"],
+                "count": count
+            })
+    return courses
+
+
+def get_best_scores_for_course(course_id: str) -> dict:
+    """Get best score per topic from results files.
+
+    Returns dict mapping topic_id -> {score, total, percentage, attempts}
+    """
+    best_scores = {}
+
+    if not RESULTS_DIR.exists():
+        return best_scores
+
+    # Get valid topic IDs for this course
+    course = COURSES.get(course_id, {})
+    valid_topics = set(course.get("topics", {}).keys())
+
+    for result_file in RESULTS_DIR.glob("*_result.json"):
+        try:
+            with open(result_file) as f:
+                result = json.load(f)
+
+            # Skip offline results without scores
+            if result.get("percentage") is None:
+                continue
+
+            quiz_id = result.get("quiz_id", "")
+            topic_id = None
+
+            # Try new format: {course}_topic_{topic_id}_{timestamp}
+            if f"{course_id}_topic_" in quiz_id:
+                parts = quiz_id.split(f"{course_id}_topic_")[1]
+                topic_parts = parts.split("_")
+                # Timestamp is last 2 parts (date and time)
+                topic_id = "_".join(topic_parts[:-2]) if len(topic_parts) > 2 else topic_parts[0]
+
+            # Try old format: topic_{topic_id}_{timestamp} (no course prefix)
+            elif quiz_id.startswith("topic_") and result.get("course") is None:
+                parts = quiz_id[6:]  # Remove "topic_" prefix
+                topic_parts = parts.split("_")
+                # Timestamp is last 2 parts (date and time)
+                candidate = "_".join(topic_parts[:-2]) if len(topic_parts) > 2 else topic_parts[0]
+                # Only use if it matches a valid topic for this course
+                if candidate in valid_topics:
+                    topic_id = candidate
+
+            # Also check explicit course field matches
+            elif result.get("course") == course_id and "_topic_" in quiz_id:
+                # Generic format with course field
+                parts = quiz_id.split("_topic_")[1] if "_topic_" in quiz_id else None
+                if parts:
+                    topic_parts = parts.split("_")
+                    topic_id = "_".join(topic_parts[:-2]) if len(topic_parts) > 2 else topic_parts[0]
+
+            if topic_id and topic_id in valid_topics:
+                percentage = result.get("percentage", 0)
+
+                if topic_id not in best_scores:
+                    best_scores[topic_id] = {
+                        "score": result.get("score", 0),
+                        "total": result.get("total", 0),
+                        "percentage": percentage,
+                        "attempts": 1
+                    }
+                else:
+                    best_scores[topic_id]["attempts"] += 1
+                    if percentage > best_scores[topic_id]["percentage"]:
+                        best_scores[topic_id]["score"] = result.get("score", 0)
+                        best_scores[topic_id]["total"] = result.get("total", 0)
+                        best_scores[topic_id]["percentage"] = percentage
+        except (json.JSONDecodeError, IOError, KeyError):
+            continue
+
+    return best_scores
+
+
+def store_offline_result(data: dict):
+    """Store an offline quiz result without scoring (no server-side quiz file)."""
+    result = {
+        "quiz_id": data["quiz_id"],
+        "course": data.get("course", "unknown"),
+        "quiz_topic": data.get("quiz_topic", "Unknown"),
+        "quiz_lecture": data.get("quiz_lecture", "Unknown"),
+        "completed": datetime.utcnow().isoformat() + "Z",
+        "queued_at": data.get("queued_at"),
+        "offline": True,
+        "answers": data["answers"],
+        "total_time_sec": data.get("total_time_sec", 0),
+        "total": len(data["answers"]),
+        "score": None,  # Cannot score without correct answers
+        "percentage": None
+    }
+
+    # Save result
+    result_file = RESULTS_DIR / f"{data['quiz_id']}_result.json"
+    with open(result_file, "w") as f:
+        json.dump(result, f, indent=2)
+
+    return jsonify({
+        "success": True,
+        "offline": True,
+        "message": "Result stored for later review"
+    })
+
+
+def strip_answers(questions: list) -> list:
+    """Remove correct answers from questions for client.
+
+    Shuffles multiple choice options to prevent position bias.
+    """
+    client_questions = []
+    for q in questions:
         client_q = {
             "id": q["id"],
             "type": q["type"],
@@ -152,26 +311,150 @@ def take_quiz(quiz_id: str):
             "topic": q.get("topic", ""),
         }
         if q["type"] == "multiple_choice":
-            client_q["options"] = q["options"]
-        client_quiz["questions"].append(client_q)
+            # Shuffle options to prevent position bias
+            options = q["options"][:]
+            correct_answer = options[q["correct"]]
+            random.shuffle(options)
+            client_q["options"] = options
+            # Update both options and correct index in original for scoring
+            q["options"] = options
+            q["correct"] = options.index(correct_answer)
+        client_questions.append(client_q)
+    return client_questions
 
-    return render_template("quiz.html", quiz=client_quiz)
+
+# Routes
+
+@app.route("/")
+def index():
+    """Home page - list of courses."""
+    courses = get_courses_with_counts()
+    # If only one course, redirect directly to it
+    if len(courses) == 1:
+        return redirect(url_for('course_home', course_id=courses[0]['id']))
+    return render_template("index.html", courses=courses)
 
 
-@app.route("/quiz/<quiz_id>/submit", methods=["POST"])
-def submit_quiz(quiz_id: str):
-    """Submit quiz answers and save results."""
-    quiz = load_quiz(quiz_id)
-    if not quiz:
-        abort(404, description="Quiz not found")
+@app.route("/course/<course_id>")
+def course_home(course_id: str):
+    """Course home page with quick quiz and topic list."""
+    if course_id not in COURSES:
+        abort(404, description="Course not found")
 
+    course = COURSES[course_id]
+    topics = get_topics_with_counts(course_id)
+    total_questions = get_total_question_count(course_id)
+    best_scores = get_best_scores_for_course(course_id)
+
+    # Add best score info to each topic
+    for topic in topics:
+        if topic["id"] in best_scores:
+            topic["best"] = best_scores[topic["id"]]
+
+    return render_template("course.html",
+                         course_id=course_id,
+                         course=course,
+                         topics=topics,
+                         total_questions=total_questions)
+
+
+@app.route("/course/<course_id>/quick")
+def quick_quiz(course_id: str):
+    """Start a quick quiz with random questions from a course."""
+    if course_id not in COURSES:
+        abort(404, description="Course not found")
+
+    count = request.args.get("count", 10, type=int)
+    count = min(max(count, 5), 50)  # Clamp between 5 and 50
+
+    # Gather all questions for this course
+    all_questions = load_all_questions_for_course(course_id)
+    question_pool = []
+    for topic_id, questions in all_questions.items():
+        for q in questions:
+            q["topic_id"] = topic_id
+        question_pool.extend(questions)
+
+    if not question_pool:
+        abort(404, description="No questions available")
+
+    # Random sample
+    selected = random.sample(question_pool, min(count, len(question_pool)))
+
+    # Generate quiz ID with course prefix
+    quiz_id = f"{course_id}_quick_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
+
+    course = COURSES[course_id]
+    quiz = {
+        "id": quiz_id,
+        "course": course_id,
+        "mode": "quick",
+        "topic": f"Quick Quiz ({len(selected)} questions)",
+        "lecture": course["short_name"],
+        "questions": strip_answers(selected)
+    }
+
+    # Store the full quiz with answers for scoring
+    quiz_file = RESULTS_DIR / f"{quiz_id}_quiz.json"
+    with open(quiz_file, "w") as f:
+        json.dump({"id": quiz_id, "course": course_id, "questions": selected}, f)
+
+    return render_template("quiz.html", quiz=quiz, course_id=course_id)
+
+
+@app.route("/course/<course_id>/topic/<topic_id>")
+def topic_quiz(course_id: str, topic_id: str):
+    """Start a quiz with all questions for a topic."""
+    if course_id not in COURSES:
+        abort(404, description="Course not found")
+
+    questions = load_questions_for_topic(course_id, topic_id)
+    if not questions:
+        abort(404, description="Topic not found or has no questions")
+
+    course = COURSES[course_id]
+    topic_info = course["topics"].get(topic_id, {})
+    quiz_id = f"{course_id}_topic_{topic_id}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+
+    quiz = {
+        "id": quiz_id,
+        "course": course_id,
+        "mode": "topic",
+        "topic": topic_info.get("name", topic_id.replace("_", " ").title()),
+        "lecture": ", ".join(topic_info.get("lectures", [])).upper(),
+        "questions": strip_answers(questions)
+    }
+
+    # Store the full quiz with answers for scoring
+    quiz_file = RESULTS_DIR / f"{quiz_id}_quiz.json"
+    with open(quiz_file, "w") as f:
+        json.dump({"id": quiz_id, "course": course_id, "questions": questions}, f)
+
+    return render_template("quiz.html", quiz=quiz, course_id=course_id)
+
+
+@app.route("/quiz/submit", methods=["POST"])
+def submit_quiz():
+    """Submit quiz answers and return results."""
     data = request.get_json()
-    if not data or "answers" not in data:
+    if not data or "quiz_id" not in data or "answers" not in data:
         abort(400, description="Invalid submission")
+
+    quiz_id = data["quiz_id"]
+
+    # Load the stored quiz with answers
+    quiz_file = RESULTS_DIR / f"{quiz_id}_quiz.json"
+    if not quiz_file.exists():
+        # This might be an offline submission - store without scoring
+        return store_offline_result(data)
+
+    with open(quiz_file) as f:
+        quiz = json.load(f)
 
     # Build result with scoring
     result = {
         "quiz_id": quiz_id,
+        "course": quiz.get("course", "unknown"),
         "completed": datetime.utcnow().isoformat() + "Z",
         "answers": [],
         "score": 0,
@@ -207,14 +490,13 @@ def submit_quiz(quiz_id: str):
                 result["score"] += 1
 
         elif q["type"] == "short_answer":
+            # Keep for backwards compatibility but don't generate new ones
             text = answer_data.get("text", "")
             answer_record["text"] = text
-            # Check for expected keywords (case-insensitive)
             keywords = q.get("expected_keywords", [])
             found = sum(1 for kw in keywords if kw.lower() in text.lower())
             answer_record["keywords_found"] = found
             answer_record["keywords_expected"] = len(keywords)
-            # Partial credit for short answers
             if keywords and found >= len(keywords) // 2:
                 result["score"] += 1
                 answer_record["is_correct"] = found == len(keywords)
@@ -232,31 +514,85 @@ def submit_quiz(quiz_id: str):
     with open(result_file, "w") as f:
         json.dump(result, f, indent=2)
 
+    # Build per-question details for mastery mode retries
+    details = []
+    for ans in result["answers"]:
+        detail = {"id": ans["question_id"], "correct": ans["is_correct"]}
+        if not ans["is_correct"]:
+            if ans["type"] == "multiple_choice":
+                detail["correct_answer"] = ans["correct_index"]
+            elif ans["type"] == "true_false":
+                detail["correct_answer"] = ans["correct_value"]
+        details.append(detail)
+
     return jsonify({
         "success": True,
         "score": result["score"],
         "total": result["total"],
-        "percentage": result["percentage"]
+        "percentage": result["percentage"],
+        "details": details
     })
 
 
-@app.route("/api/quizzes")
-def api_list_quizzes():
-    """API endpoint to list quizzes."""
-    return jsonify(list_quizzes())
+# API endpoints
+
+@app.route("/api/courses")
+def api_courses():
+    """API endpoint to list courses."""
+    return jsonify(get_courses_with_counts())
 
 
-@app.route("/api/quiz/<quiz_id>")
-def api_get_quiz(quiz_id: str):
-    """API endpoint to get quiz details (without answers)."""
-    quiz = load_quiz(quiz_id)
-    if not quiz:
+@app.route("/api/course/<course_id>/topics")
+def api_topics(course_id: str):
+    """API endpoint to list topics for a course."""
+    if course_id not in COURSES:
         abort(404)
-    # Strip correct answers
-    for q in quiz.get("questions", []):
-        q.pop("correct", None)
-        q.pop("expected_keywords", None)
-    return jsonify(quiz)
+    return jsonify(get_topics_with_counts(course_id))
+
+
+@app.route("/api/course/<course_id>/questions/all")
+def api_all_questions(course_id: str):
+    """API endpoint to get all questions for a course (for offline caching)."""
+    if course_id not in COURSES:
+        abort(404)
+
+    all_questions = load_all_questions_for_course(course_id)
+    course = COURSES[course_id]
+
+    # Strip answers for client but include topic_id
+    result = {}
+    for topic_id, questions in all_questions.items():
+        result[topic_id] = []
+        for q in questions:
+            client_q = {
+                "id": q["id"],
+                "type": q["type"],
+                "question": q["question"],
+                "topic": q.get("topic", ""),
+                "topic_id": topic_id,
+            }
+            if q["type"] == "multiple_choice":
+                client_q["options"] = q["options"]
+            result[topic_id].append(client_q)
+
+    return jsonify({
+        "course_id": course_id,
+        "course_name": course["name"],
+        "topics": course["topics"],
+        "questions": result,
+        "generated": datetime.utcnow().isoformat() + "Z"
+    })
+
+
+@app.route("/api/course/<course_id>/questions/<topic_id>")
+def api_topic_questions(course_id: str, topic_id: str):
+    """API endpoint to get questions for a specific topic."""
+    if course_id not in COURSES:
+        abort(404)
+    questions = load_questions_for_topic(course_id, topic_id)
+    if not questions:
+        abort(404)
+    return jsonify(strip_answers(questions))
 
 
 if __name__ == "__main__":

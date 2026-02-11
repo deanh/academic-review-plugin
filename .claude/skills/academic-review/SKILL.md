@@ -390,7 +390,7 @@ strong_topics:
 
 ## Web Quiz System
 
-The web quiz system allows pre-generating quizzes that can be taken on mobile devices (iPhone via Safari), with results synced back for Claude-assisted review.
+The web quiz system provides a question pool organized by exam topics. Questions are designed for mastery-focused learning, not slide memorization.
 
 ### Architecture Overview
 
@@ -398,192 +398,183 @@ The web quiz system allows pre-generating quizzes that can be taken on mobile de
 LOCAL                          SERVER                    MOBILE
 ─────────────────────────────────────────────────────────────────
 Claude generates    rsync      Flask serves     Safari
-quiz JSON files ──────────▶   quizzes      ◀─────────── iPhone
-                                   │
-.cache/web-quizzes/                │
+question files ──────────▶   quizzes      ◀─────────── iPhone
+                                   │                    (+ offline)
+server/data/questions/             │
                                    ▼
-Claude reads       rsync      Results saved
-results for    ◀──────────   as JSON files
-review
-.cache/quiz-results/
+                              Results saved
+                              as JSON files
 ```
 
-### Generating Web Quizzes
+### Question Pool Structure
 
-When user requests web quizzes, generate JSON files in `.cache/web-quizzes/`.
+Questions are organized by exam topic in `server/data/questions/`:
 
-**File naming**: `{lecture}_{topic}_{date}.json`
-Example: `pcv05_dlt_2026-01-14.json`
+```
+server/data/questions/
+  homogeneous_2d.json      # Points, lines, dual conics (pcv3, pcv4)
+  transformations.json     # Planar transforms, DLT (pcv4-6)
+  homogeneous_3d.json      # 3D coords, quadrics (pcv7)
+  camera_model.json        # Projection matrix, orientation (pcv8, pcv9)
+  distortion.json          # Radial distortion, aberrations (pcv10)
+  epipolar.json            # F matrix, E matrix, 8-point (pcv11, pcv12)
+  triangulation.json       # Intersection, stereo, reconstruction (pcv13)
+  trifocal.json            # Trifocal tensor (pcv14, pcv15)
+  bundle_adjustment.json   # Nonlinear optimization (pcv17, pcv19)
+  calibration.json         # Self-calibration, DAQ (pcv18, pcv20)
+  robust_estimation.json   # RANSAC, M-estimators (pcv21)
+```
 
-**Important**: Use zero-padded lecture numbers for single digits (pcv01-pcv09, not pcv1-pcv9). This ensures correct alphabetical sorting in file listings and the web UI.
+Each file contains an array of questions (no quiz metadata needed).
 
-**Quiz JSON Format** (IMPORTANT - use this exact structure):
+### Question JSON Format
 
 ```json
-{
-  "id": "pcv05_dlt_2026-01-14",
-  "lecture": "pcv05",
-  "topic": "Direct Linear Transformation",
-  "source_pdf": "lectures/PCV/pcv05_WS2526_DLT.pdf",
-  "cache_hash": "c57edf3d7baf5f7d",
-  "created": "2026-01-14T10:30:00Z",
-  "questions": [
-    {
-      "id": "q1",
-      "type": "multiple_choice",
-      "question": "How many DOF does a 2D projectivity have?",
-      "options": ["4", "6", "8", "9"],
-      "correct": 2,
-      "slide_ref": "Slide 3",
-      "topic": "degrees_of_freedom"
-    },
-    {
-      "id": "q2",
-      "type": "true_false",
-      "question": "The DLT algorithm requires iterative optimization.",
-      "correct": false,
-      "slide_ref": "Slide 14",
-      "topic": "dlt_properties"
-    },
-    {
-      "id": "q3",
-      "type": "short_answer",
-      "question": "How are lines transformed under a homography H?",
-      "expected_keywords": ["H^{-T}", "inverse transpose", "H^-T"],
-      "slide_ref": "Slide 7",
-      "topic": "line_transformation"
-    }
-  ]
-}
+[
+  {
+    "id": "hom2d_001",
+    "type": "multiple_choice",
+    "question": "The fundamental matrix $F$ has rank 2. This means $\\det(F) = 0$, which provides one constraint when estimating $F$ from point correspondences. How many independent parameters does $F$ have after accounting for this rank constraint and overall scale ambiguity?",
+    "options": ["6", "7", "8", "9"],
+    "correct": 1,
+    "topic": "fundamental_matrix_properties"
+  },
+  {
+    "id": "hom2d_002",
+    "type": "true_false",
+    "question": "Given a homography $H$ that maps points as $x' = Hx$, lines are transformed by the same matrix: $l' = Hl$.",
+    "correct": false,
+    "topic": "line_transformation"
+  }
+]
 ```
 
-**Question types**:
-- `multiple_choice`: Include `options` array and `correct` (0-indexed)
-- `true_false`: Include `correct` as boolean
-- `short_answer`: Include `expected_keywords` array for partial matching
+### Critical Question Quality Guidelines
 
-**Guidelines for generating questions**:
-- Include 10-15 questions per quiz
-- Mix question types (60% MC, 20% T/F, 20% short answer)
-- Reference specific slides using `slide_ref`
-- Tag each question with a `topic` for tracking
-- **IMPORTANT**: Randomize correct answer positions (see utility below)
-- Use ASCII for formulas in questions (e.g., "H^{-T}" not LaTeX)
+**1. SELF-CONTAINED QUESTIONS**
 
-### Answer Randomization Utility
+Every question must be answerable WITHOUT referencing slides. Include all necessary context:
 
-To prevent answer position bias, use `scripts/quiz_utils.py` when generating multiple choice questions:
+BAD (requires slide knowledge):
+```json
+"question": "What is the rank of F?"
+```
+
+GOOD (self-contained):
+```json
+"question": "The fundamental matrix $F$ encodes the epipolar geometry between two views. Given that $F$ maps points to epipolar lines via $l' = Fx$, and the epipole $e'$ lies on all epipolar lines (so $Fe = 0$), what is the rank of $F$?"
+```
+
+**2. USE PROPER LATEX NOTATION**
+
+The web UI renders LaTeX via KaTeX. Always use proper notation:
+
+- Inline math: `$F$`, `$x'^T F x = 0$`
+- Display math: `$$P = K[R|t]$$`
+- Common symbols: `$\\mathbf{x}$`, `$\\lambda$`, `$\\Sigma$`
+- Matrices: `$\\begin{bmatrix} a & b \\\\ c & d \\end{bmatrix}$`
+
+**3. NO SHORT_ANSWER TYPE FOR WEB QUIZZES**
+
+Only use `multiple_choice` and `true_false` for web quizzes. Short answer questions with keyword matching don't work well on mobile and don't test understanding effectively.
+
+**4. FOCUS ON UNDERSTANDING, NOT MEMORIZATION**
+
+BAD (trivia/memorization):
+```json
+"question": "Who introduced the 8-point algorithm?"
+```
+
+GOOD (tests understanding):
+```json
+"question": "The 8-point algorithm estimates the fundamental matrix $F$ from point correspondences. Why is normalization of point coordinates crucial before applying SVD to solve the linear system?"
+```
+
+**5. USE EXTERNAL KNOWLEDGE FREELY**
+
+Questions can and should draw from:
+- Hartley & Zisserman "Multiple View Geometry"
+- Faugeras "Three-Dimensional Computer Vision"
+- Standard photogrammetry literature
+
+Don't limit questions to what's explicitly on slides - exam questions test understanding of the field, not slide memorization.
+
+**6. RANDOMIZE ANSWER POSITIONS**
+
+Use `scripts/quiz_utils.py` to avoid position bias:
 
 ```python
-from scripts.quiz_utils import shuffle_options, create_mc_question
+from scripts.quiz_utils import create_mc_question
 
-# Method 1: Shuffle existing options
-options = ["4", "6", "8", "9"]  # correct answer is "8" at index 2
-shuffled, new_correct_idx = shuffle_options(options, correct_index=2)
-
-# Method 2: Create question with automatic shuffling
 question = create_mc_question(
     question="How many DOF does a 2D homography have?",
     correct="8",
     distractors=["4", "6", "9"],
-    id="q1",
-    topic="degrees_of_freedom",
-    slide_ref="Slide 3"
+    id="trans_001",
+    topic="homography_dof"
 )
-# Returns dict with shuffled options and correct index
 ```
 
-**Always use one of these methods** - never manually place correct answers, as this leads to positional bias (e.g., correct answer always in position B).
+### Topic-Specific Guidance
 
-### Reading Quiz Results
+**Epipolar Geometry (highest weight on exam)**
+- Essential vs fundamental matrix properties and relationship
+- 8-point algorithm derivation and why normalization matters
+- Epipolar constraint geometric interpretation
+- Degenerate configurations
 
-After user takes quizzes and syncs results, read from `.cache/quiz-results/`.
+**Camera Model**
+- Projection matrix decomposition $P = K[R|t]$
+- Interior vs exterior orientation
+- Principal point, focal length, skew interpretation
+- DLT for spatial resection
 
-**Result JSON Format** (server generates this):
+**Robust Estimation**
+- RANSAC: why it works, parameter selection, failure modes
+- M-estimators and influence functions
+- When to use RANSAC vs M-estimators vs LMedS
+
+### Example High-Quality Questions
 
 ```json
 {
-  "quiz_id": "pcv05_dlt_2026-01-14",
-  "completed": "2026-01-14T14:22:00Z",
-  "score": 8,
-  "total": 10,
-  "percentage": 80,
-  "total_time_sec": 180,
-  "answers": [
-    {
-      "question_id": "q1",
-      "topic": "degrees_of_freedom",
-      "slide_ref": "Slide 3",
-      "type": "multiple_choice",
-      "selected": 2,
-      "correct_index": 2,
-      "is_correct": true,
-      "time_spent_sec": 15
-    },
-    {
-      "question_id": "q2",
-      "topic": "dlt_properties",
-      "slide_ref": "Slide 14",
-      "type": "true_false",
-      "selected": true,
-      "correct_value": false,
-      "is_correct": false,
-      "time_spent_sec": 8
-    },
-    {
-      "question_id": "q3",
-      "topic": "line_transformation",
-      "slide_ref": "Slide 7",
-      "type": "short_answer",
-      "text": "l' = H^-T @ l",
-      "keywords_found": 2,
-      "keywords_expected": 3,
-      "is_correct": true,
-      "time_spent_sec": 25
-    }
-  ]
+  "id": "epi_001",
+  "type": "multiple_choice",
+  "question": "The essential matrix $E$ relates corresponding points in normalized image coordinates: $\\hat{x}'^T E \\hat{x} = 0$. Unlike the fundamental matrix $F$, the essential matrix has additional structure because it can be decomposed as $E = [t]_\\times R$. How many degrees of freedom does $E$ have?",
+  "options": ["5", "6", "7", "9"],
+  "correct": 0,
+  "topic": "essential_matrix_dof"
 }
 ```
 
-### Reviewing Web Quiz Results
-
-When user asks to review web quiz results:
-
-1. Read result files from `.cache/quiz-results/`
-2. Cross-reference with original quiz JSON to get full question text
-3. Analyze patterns:
-   - Which topics had incorrect answers?
-   - How much time spent on each question?
-   - Compare with previous quiz logs for recurring weak areas
-4. Generate study recommendations based on missed questions
-5. Offer focused review on weak topics
-
-**Example review workflow**:
-```
-User: "Review my web quiz results"
-
-Claude:
-1. Glob .cache/quiz-results/*.json
-2. Read each result file
-3. Load corresponding quiz from .cache/web-quizzes/
-4. Summarize performance
-5. Identify weak topics across multiple quizzes
-6. Suggest focused review or generate follow-up quiz
+```json
+{
+  "id": "robust_001",
+  "type": "true_false",
+  "question": "RANSAC is guaranteed to find the optimal solution (maximum inlier set) if given enough iterations. The number of iterations needed depends on the inlier ratio and the number of points needed to fit the model.",
+  "correct": false,
+  "topic": "ransac_properties"
+}
 ```
 
-### Sync Commands
+### Server Deployment
 
-**Push quizzes to server**:
+Questions are stored in `server/data/questions/`. Deploy to server using rsync:
+
 ```bash
-./scripts/sync_quizzes.sh
+rsync -avz server/data/questions/ user@server:/var/www/quizzes/data/questions/
 ```
 
-**Pull results from server**:
-```bash
-./scripts/sync_results.sh
-```
+The server provides two quiz modes:
+- **Quick Quiz** (`/quick?count=N`): Random N questions from all topics
+- **Topic Practice** (`/topic/<topic_id>`): All questions for a specific topic
 
-Note: User must configure server credentials in these scripts.
+### Offline Support
+
+The web app supports offline mode via localStorage. Users can:
+1. Click "Download for Offline" on the home page
+2. Take quizzes without network connection
+3. Results are queued locally and synced when back online
 
 ### Quiz Validation
 

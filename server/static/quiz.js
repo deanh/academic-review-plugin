@@ -2,14 +2,24 @@
  * Quiz JavaScript - Handles quiz interaction and submission
  */
 
+const RESULTS_QUEUE_KEY = 'pcv_results_queue';
+
 class Quiz {
     constructor(data) {
         this.data = data;
+        this.allQuestions = [...data.questions]; // preserve full set
         this.currentIndex = 0;
         this.answers = {};
         this.questionTimes = {};
         this.questionStartTime = Date.now();
         this.quizStartTime = Date.now();
+
+        // Mastery mode state
+        this.masteryMode = false;
+        this.correctAnswerMap = {};  // {questionId: correctAnswer}
+        this.batchNumber = 0;
+        this.masteryHistory = [];    // [{batch, score, total}]
+        this.wrongQuestionIds = [];
 
         this.init();
     }
@@ -93,8 +103,30 @@ class Quiz {
     formatText(text) {
         // Escape HTML but preserve basic formatting
         text = text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        // Convert LaTeX-style formulas to basic representation
-        text = text.replace(/\$([^$]+)\$/g, '<code>$1</code>');
+
+        // Render LaTeX math with KaTeX if available
+        if (typeof katex !== 'undefined') {
+            // Display math ($$...$$) - must come before inline
+            text = text.replace(/\$\$([^$]+)\$\$/g, (match, latex) => {
+                try {
+                    return katex.renderToString(latex, { displayMode: true, throwOnError: false });
+                } catch (e) {
+                    return `<code>${latex}</code>`;
+                }
+            });
+            // Inline math ($...$)
+            text = text.replace(/\$([^$]+)\$/g, (match, latex) => {
+                try {
+                    return katex.renderToString(latex, { displayMode: false, throwOnError: false });
+                } catch (e) {
+                    return `<code>${latex}</code>`;
+                }
+            });
+        } else {
+            // Fallback if KaTeX not loaded
+            text = text.replace(/\$\$([^$]+)\$\$/g, '<div class="math-display"><code>$1</code></div>');
+            text = text.replace(/\$([^$]+)\$/g, '<code>$1</code>');
+        }
         return text;
     }
 
@@ -170,7 +202,24 @@ class Quiz {
         }, 1000);
     }
 
+    // Queue result to localStorage for later sync
+    queueResultOffline(submitData) {
+        try {
+            const queue = JSON.parse(localStorage.getItem(RESULTS_QUEUE_KEY) || '[]');
+            submitData.queued_at = new Date().toISOString();
+            queue.push(submitData);
+            localStorage.setItem(RESULTS_QUEUE_KEY, JSON.stringify(queue));
+            return true;
+        } catch (e) {
+            console.error('Failed to queue result:', e);
+            return false;
+        }
+    }
+
     async submit() {
+        if (this.masteryMode) {
+            return this.submitRetry();
+        }
         this.recordQuestionTime();
 
         const totalTime = Math.round((Date.now() - this.quizStartTime) / 1000);
@@ -190,43 +239,223 @@ class Quiz {
         submitBtn.disabled = true;
         submitBtn.textContent = 'Submitting...';
 
+        const submitData = {
+            quiz_id: this.data.id,
+            course: this.data.course,
+            quiz_topic: this.data.topic,
+            quiz_lecture: this.data.lecture,
+            answers: answers,
+            total_time_sec: totalTime
+        };
+
         try {
-            const response = await fetch(`/quiz/${this.data.id}/submit`, {
+            // Use new unified submit endpoint
+            const response = await fetch('/quiz/submit', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    answers: answers,
-                    total_time_sec: totalTime
-                })
+                body: JSON.stringify(submitData)
             });
 
             const result = await response.json();
 
             if (result.success) {
+                // Store per-question details for mastery retries
+                if (result.details) {
+                    this.wrongQuestionIds = [];
+                    for (const d of result.details) {
+                        if (!d.correct) {
+                            this.correctAnswerMap[d.id] = d.correct_answer;
+                            this.wrongQuestionIds.push(d.id);
+                        }
+                    }
+                }
+                this.masteryHistory.push({
+                    batch: this.batchNumber,
+                    score: result.score,
+                    total: result.total
+                });
                 this.showResults(result);
             } else {
-                alert('Failed to submit quiz. Please try again.');
-                submitBtn.disabled = false;
-                submitBtn.textContent = 'Submit';
+                throw new Error('Server returned failure');
             }
         } catch (error) {
             console.error('Submit error:', error);
-            alert('Failed to submit quiz. Please check your connection.');
-            submitBtn.disabled = false;
-            submitBtn.textContent = 'Submit';
+
+            // Queue for offline sync
+            if (this.queueResultOffline(submitData)) {
+                const answered = answers.filter(a => a.selected !== undefined || a.text).length;
+                this.showResults({
+                    offline: true,
+                    answered: answered,
+                    total: this.data.questions.length
+                });
+            } else {
+                alert('Failed to save quiz results. Please try again.');
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Submit';
+            }
         }
     }
 
     showResults(result) {
-        document.getElementById('final-score').textContent = result.score;
-        document.getElementById('final-percentage').textContent = `${result.percentage}%`;
-        document.getElementById('results-modal').classList.remove('hidden');
+        const modal = document.getElementById('results-modal');
+        const scoreEl = document.getElementById('final-score');
+        const percentEl = document.getElementById('final-percentage');
+        const totalEl = document.getElementById('final-total');
+        const retryBtn = document.getElementById('retry-btn');
+        const titleEl = document.getElementById('results-title');
+        const batchIndicator = document.getElementById('batch-indicator');
+        const masterySummary = document.getElementById('mastery-summary');
+
+        // Reset mastery UI
+        retryBtn.classList.add('hidden');
+        batchIndicator.classList.add('hidden');
+        masterySummary.classList.add('hidden');
+        modal.querySelector('.modal-content').classList.remove('mastery-complete');
+        titleEl.textContent = 'Quiz Complete!';
+
+        if (result.offline) {
+            scoreEl.textContent = result.answered;
+            totalEl.textContent = `/ ${result.total} answered`;
+            percentEl.textContent = 'Saved offline';
+            percentEl.classList.add('offline-notice');
+
+            const queue = JSON.parse(localStorage.getItem(RESULTS_QUEUE_KEY) || '[]');
+            if (queue.length > 1) {
+                percentEl.textContent = `Saved offline (${queue.length} pending)`;
+            }
+        } else {
+            scoreEl.textContent = result.score;
+            totalEl.textContent = `/ ${result.total}`;
+            percentEl.textContent = `${result.percentage}%`;
+            percentEl.classList.remove('offline-notice');
+
+            // Show batch indicator for retry batches
+            if (this.batchNumber > 0) {
+                batchIndicator.textContent = `Batch ${this.batchNumber + 1}`;
+                batchIndicator.classList.remove('hidden');
+                titleEl.textContent = 'Batch Results';
+            }
+
+            // Show retry button if there are wrong answers
+            const wrongCount = this.wrongQuestionIds.length;
+            if (wrongCount > 0) {
+                retryBtn.textContent = `Retry Wrong Answers (${wrongCount})`;
+                retryBtn.classList.remove('hidden');
+            }
+        }
+
+        modal.classList.remove('hidden');
+    }
+
+    startRetry() {
+        // Filter to only the wrong questions from the full set
+        const wrongQuestions = this.allQuestions.filter(
+            q => this.wrongQuestionIds.includes(q.id)
+        );
+
+        // Shuffle the wrong questions
+        for (let i = wrongQuestions.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [wrongQuestions[i], wrongQuestions[j]] = [wrongQuestions[j], wrongQuestions[i]];
+        }
+
+        // Reset quiz state for retry batch
+        this.data.questions = wrongQuestions;
+        this.currentIndex = 0;
+        this.answers = {};
+        this.questionTimes = {};
+        this.questionStartTime = Date.now();
+        this.masteryMode = true;
+        this.batchNumber++;
+
+        // Hide modal, re-enable footer, render first question
+        document.getElementById('results-modal').classList.add('hidden');
+
+        const submitBtn = document.getElementById('submit-btn');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Submit';
+
+        this.renderQuestion();
+        this.updateProgress();
+    }
+
+    submitRetry() {
+        this.recordQuestionTime();
+
+        let score = 0;
+        const total = this.data.questions.length;
+        this.wrongQuestionIds = [];
+
+        for (const q of this.data.questions) {
+            const answer = this.answers[q.id];
+            const correctAnswer = this.correctAnswerMap[q.id];
+            let isCorrect = false;
+
+            if (q.type === 'multiple_choice') {
+                isCorrect = answer?.selected === correctAnswer;
+            } else if (q.type === 'true_false') {
+                isCorrect = answer?.selected === correctAnswer;
+            }
+
+            if (isCorrect) {
+                score++;
+            } else {
+                this.wrongQuestionIds.push(q.id);
+            }
+        }
+
+        const percentage = total > 0 ? Math.round(score / total * 100) : 0;
+
+        this.masteryHistory.push({
+            batch: this.batchNumber,
+            score: score,
+            total: total
+        });
+
+        if (this.wrongQuestionIds.length === 0) {
+            this.showMasteryComplete();
+        } else {
+            this.showResults({ score, total, percentage });
+        }
+    }
+
+    showMasteryComplete() {
+        const modal = document.getElementById('results-modal');
+        const scoreEl = document.getElementById('final-score');
+        const percentEl = document.getElementById('final-percentage');
+        const totalEl = document.getElementById('final-total');
+        const retryBtn = document.getElementById('retry-btn');
+        const titleEl = document.getElementById('results-title');
+        const batchIndicator = document.getElementById('batch-indicator');
+        const masterySummary = document.getElementById('mastery-summary');
+
+        titleEl.textContent = 'Mastery Complete!';
+        scoreEl.textContent = this.allQuestions.length;
+        totalEl.textContent = `/ ${this.allQuestions.length}`;
+        percentEl.textContent = '100%';
+        percentEl.classList.remove('offline-notice');
+        retryBtn.classList.add('hidden');
+        batchIndicator.classList.add('hidden');
+
+        // Build batch history summary
+        let summaryHtml = '<div class="mastery-history">';
+        for (const entry of this.masteryHistory) {
+            const label = entry.batch === 0 ? 'Initial' : `Batch ${entry.batch + 1}`;
+            summaryHtml += `<div class="mastery-history-row"><span>${label}</span><span>${entry.score}/${entry.total}</span></div>`;
+        }
+        summaryHtml += '</div>';
+        masterySummary.innerHTML = summaryHtml;
+        masterySummary.classList.remove('hidden');
+
+        modal.classList.remove('hidden');
+        modal.querySelector('.modal-content').classList.add('mastery-complete');
     }
 }
 
 // Initialize quiz when page loads
 document.addEventListener('DOMContentLoaded', () => {
     if (typeof quizData !== 'undefined') {
-        new Quiz(quizData);
+        window.quizInstance = new Quiz(quizData);
     }
 });

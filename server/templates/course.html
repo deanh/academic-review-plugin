@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>{{ course.short_name }} Exam Prep</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>{{ course.short_name }} Exam Prep</h1>
+            <p class="subtitle">{{ total_questions }} questions across {{ topics|length }} topics</p>
+        </header>
+
+        <main>
+            <!-- Quick Quiz Section -->
+            <section class="mode-section">
+                <h2 class="section-title">Quick Quiz</h2>
+                <p class="section-desc">Random questions from all topics. Great for spaced repetition.</p>
+                <div class="quick-options">
+                    <a href="{{ url_for('quick_quiz', course_id=course_id, count=10) }}" class="quick-btn">10 Questions</a>
+                    <a href="{{ url_for('quick_quiz', course_id=course_id, count=15) }}" class="quick-btn">15 Questions</a>
+                    <a href="{{ url_for('quick_quiz', course_id=course_id, count=20) }}" class="quick-btn primary">20 Questions</a>
+                </div>
+            </section>
+
+            <!-- Topic Practice Section -->
+            <section class="mode-section">
+                <h2 class="section-title">Topic Practice</h2>
+                <p class="section-desc">Deep dive into specific exam topics.</p>
+
+                {% if topics %}
+                <div class="topic-list">
+                    {% for topic in topics %}
+                    <a href="{{ url_for('topic_quiz', course_id=course_id, topic_id=topic.id) }}" class="topic-card{% if topic.best %} attempted{% endif %}">
+                        <div class="topic-info">
+                            <span class="topic-name">{{ topic.name }}</span>
+                            <span class="topic-desc">{{ topic.description }}</span>
+                            <span class="topic-lectures">{{ topic.lectures|join(', ')|upper }}</span>
+                        </div>
+                        <div class="topic-stats">
+                            {% if topic.best %}
+                            <span class="topic-score {% if topic.best.percentage >= 80 %}good{% elif topic.best.percentage >= 60 %}ok{% else %}needs-work{% endif %}">{{ topic.best.percentage }}%</span>
+                            {% endif %}
+                            <span class="topic-count">{{ topic.count }}q</span>
+                        </div>
+                    </a>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="empty-state">
+                    <p>No questions available yet.</p>
+                    <p class="hint">Generate questions using Claude and sync them to the server.</p>
+                </div>
+                {% endif %}
+            </section>
+
+            <!-- Offline Section -->
+            <section class="mode-section offline-section">
+                <div class="offline-header">
+                    <h2 class="section-title">Offline Mode</h2>
+                    <span id="offline-status" class="offline-status"></span>
+                </div>
+                <p class="section-desc">Download {{ course.short_name }} questions for offline study.</p>
+                <button id="download-btn" class="download-btn" data-course="{{ course_id }}">
+                    <span class="download-icon">&#8595;</span>
+                    Download for Offline
+                </button>
+                <div id="offline-info" class="offline-info hidden">
+                    <span id="cached-count">0</span> questions cached
+                    <span class="separator">&bull;</span>
+                    Last synced: <span id="last-synced">Never</span>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        const COURSE_ID = "{{ course_id }}";
+    </script>
+    <script src="{{ url_for('static', filename='course.js') }}"></script>
+</body>
+</html>

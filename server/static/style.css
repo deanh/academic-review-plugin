@@ -51,6 +51,286 @@ header h1 {
     font-size: 0.875rem;
 }
 
+/* Course list (index page) */
+.course-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.course-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    background: var(--card-bg);
+    border-radius: var(--radius);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    text-decoration: none;
+    color: inherit;
+    transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.course-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.course-card:active {
+    transform: scale(0.99);
+}
+
+.course-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.course-short {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--primary);
+}
+
+.course-name {
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.course-desc {
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+}
+
+.course-count {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    flex-shrink: 0;
+    margin-left: 16px;
+}
+
+/* Mode sections (home page) */
+.mode-section {
+    background: var(--card-bg);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.section-title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.section-desc {
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    margin-bottom: 16px;
+}
+
+/* Quick quiz buttons */
+.quick-options {
+    display: flex;
+    gap: 12px;
+}
+
+.quick-btn {
+    flex: 1;
+    padding: 14px 16px;
+    background: var(--bg);
+    border-radius: 8px;
+    text-decoration: none;
+    color: var(--text);
+    font-weight: 600;
+    font-size: 0.875rem;
+    text-align: center;
+    transition: background 0.15s, transform 0.15s;
+}
+
+.quick-btn:hover {
+    background: var(--border);
+}
+
+.quick-btn:active {
+    transform: scale(0.98);
+}
+
+.quick-btn.primary {
+    background: var(--primary);
+    color: white;
+}
+
+.quick-btn.primary:hover {
+    background: var(--primary-dark);
+}
+
+/* Topic list */
+.topic-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.topic-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 16px;
+    background: var(--bg);
+    border-radius: 8px;
+    text-decoration: none;
+    color: inherit;
+    transition: background 0.15s, transform 0.15s;
+}
+
+.topic-card:hover {
+    background: var(--border);
+}
+
+.topic-card:active {
+    transform: scale(0.99);
+}
+
+.topic-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.topic-name {
+    font-weight: 600;
+    font-size: 0.9375rem;
+}
+
+.topic-desc {
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.topic-lectures {
+    font-size: 0.75rem;
+    color: var(--primary);
+    font-weight: 500;
+}
+
+.topic-stats {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+    margin-left: 12px;
+}
+
+.topic-count {
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.topic-score {
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 4px 8px;
+    border-radius: 4px;
+    min-width: 42px;
+    text-align: center;
+}
+
+.topic-score.good {
+    background: var(--success);
+    color: white;
+}
+
+.topic-score.ok {
+    background: #f59e0b;
+    color: white;
+}
+
+.topic-score.needs-work {
+    background: var(--error);
+    color: white;
+}
+
+/* Offline section */
+.offline-section {
+    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+}
+
+.offline-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.offline-status {
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+.offline-status.ready {
+    background: var(--success);
+    color: white;
+}
+
+.offline-status.pending {
+    background: #f59e0b;
+    color: white;
+}
+
+.download-btn {
+    width: 100%;
+    padding: 14px 24px;
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: background 0.15s, transform 0.15s;
+}
+
+.download-btn:hover {
+    background: var(--primary-dark);
+}
+
+.download-btn:active {
+    transform: scale(0.98);
+}
+
+.download-btn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+.download-icon {
+    font-size: 1.25rem;
+}
+
+.offline-info {
+    margin-top: 12px;
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+.offline-info .separator {
+    margin: 0 6px;
+}
+
 /* Quiz list */
 .quiz-list {
     list-style: none;
@@ -538,6 +818,111 @@ header h1 {
 
 .btn.primary:hover {
     background: var(--primary-dark);
+}
+
+.btn.secondary {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+}
+
+.btn.secondary:hover {
+    background: var(--border);
+}
+
+.modal-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 8px;
+}
+
+.offline-notice {
+    color: #f59e0b !important;
+    font-size: 1rem !important;
+}
+
+/* KaTeX math styling */
+.katex {
+    font-size: 1.1em;
+}
+
+.katex-display {
+    margin: 16px 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+
+.math-display {
+    display: block;
+    text-align: center;
+    margin: 16px 0;
+}
+
+.question-text code,
+.option code {
+    background: rgba(0, 0, 0, 0.05);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'SF Mono', SFMono-Regular, Consolas, monospace;
+    font-size: 0.9em;
+}
+
+/* Mastery mode */
+.btn.retry {
+    background: #f59e0b;
+    color: white;
+    border: none;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: 600;
+    padding: 14px 32px;
+    border-radius: var(--radius);
+    transition: background 0.15s;
+    width: 100%;
+}
+
+.btn.retry:hover {
+    background: #d97706;
+}
+
+.batch-indicator {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 8px;
+}
+
+.mastery-summary {
+    margin-bottom: 16px;
+}
+
+.mastery-history {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    text-align: left;
+    font-size: 0.875rem;
+    padding: 12px;
+    background: var(--bg);
+    border-radius: 8px;
+}
+
+.mastery-history-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    color: var(--text-muted);
+}
+
+.mastery-complete .percentage {
+    color: var(--success);
+}
+
+.mastery-complete h2 {
+    color: var(--success);
 }
 
 /* Responsive adjustments */

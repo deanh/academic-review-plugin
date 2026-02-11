@@ -4,12 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>{{ quiz.topic }} - Quiz</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" integrity="sha384-n8MVd4RsNIU0tAv4ct0nTaAbDJwPJzDEaqSD1odI+WdtXRGWt2kTvGFasHpSy3SV" crossorigin="anonymous">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
     <div class="container quiz-container">
         <header class="quiz-header-bar">
-            <a href="{{ url_for('index') }}" class="back-btn">&larr;</a>
+            <a href="{{ url_for('course_home', course_id=course_id) }}" class="back-btn">&larr;</a>
             <div class="quiz-info">
                 <span class="lecture-badge">{{ quiz.lecture }}</span>
                 <span class="progress" id="progress">1 / {{ quiz.questions|length }}</span>
@@ -33,16 +34,23 @@
     <!-- Results Modal -->
     <div id="results-modal" class="modal hidden">
         <div class="modal-content">
-            <h2>Quiz Complete!</h2>
+            <h2 id="results-title">Quiz Complete!</h2>
+            <div id="batch-indicator" class="batch-indicator hidden"></div>
             <div class="score-display">
                 <span class="score" id="final-score">0</span>
-                <span class="total">/ {{ quiz.questions|length }}</span>
+                <span class="total" id="final-total">/ {{ quiz.questions|length }}</span>
             </div>
             <div class="percentage" id="final-percentage">0%</div>
-            <a href="{{ url_for('index') }}" class="btn primary">Back to Quizzes</a>
+            <div id="mastery-summary" class="mastery-summary hidden"></div>
+            <div class="modal-actions">
+                <button id="retry-btn" class="btn retry hidden" onclick="window.quizInstance.startRetry()">Retry Wrong Answers</button>
+                <a href="{{ url_for('course_home', course_id=course_id) }}" class="btn primary">Back to {{ quiz.lecture }}</a>
+                <a href="{{ url_for('quick_quiz', course_id=course_id, count=10) }}" class="btn secondary">Quick Quiz (10)</a>
+            </div>
         </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" crossorigin="anonymous"></script>
     <script>
         // Quiz data from server
         const quizData = {{ quiz | tojson | safe }};
