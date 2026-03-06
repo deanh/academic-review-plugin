@@ -142,6 +142,58 @@ COURSES = {
                 "lectures": ["pcv3", "pcv4", "pcv5", "pcv7", "pcv8", "pcv11", "pcv12", "pcv14", "pcv17", "pcv18"]
             }
         }
+    },
+    "geodatabases": {
+        "name": "Geodatabases & Infrastructures",
+        "short_name": "GDB",
+        "description": "TU Berlin Geodatabases course - relational model, UML, SQL, PostGIS, spatial indexing",
+        "topics": {
+            "introduction": {
+                "name": "Introduction to Geodatabases",
+                "description": "DBMS properties, ACID transactions, relational model, SQL sublanguages",
+                "lectures": ["gdb1"]
+            },
+            "uml_modeling": {
+                "name": "UML Modeling & Mapping to Tables",
+                "description": "Classes, inheritance, associations, aggregation, composition, mapping to relational schema",
+                "lectures": ["gdb2", "gdb3", "gdb11"]
+            },
+            "simple_features": {
+                "name": "Simple Feature Model",
+                "description": "OGC geometry hierarchy, ADTs, WKT, spatial data types, geometry methods",
+                "lectures": ["gdb4"]
+            },
+            "topological_relations": {
+                "name": "Topological Relations",
+                "description": "9-Intersection Model, DE-9IM, spatial predicates (touches, contains, overlaps, etc.)",
+                "lectures": ["gdb5"]
+            },
+            "normalization": {
+                "name": "Database Normalization",
+                "description": "1NF, 2NF, 3NF, BCNF, functional dependencies, keys, anomalies",
+                "lectures": ["gdb6"]
+            },
+            "geo_data_infrastructure": {
+                "name": "Geo Data Infrastructures & Web Services",
+                "description": "Interoperability, OGC standards, WMS, WFS, WCS, INSPIRE",
+                "lectures": ["gdb7", "gdb8"]
+            },
+            "spatial_indexing": {
+                "name": "Spatial Indexing with R-Trees",
+                "description": "R-Tree structure, insertion, deletion, spatial queries, filter-refine strategy",
+                "lectures": ["gdb10"]
+            },
+            "sql_basics": {
+                "name": "SQL Fundamentals",
+                "description": "CREATE, SELECT, INSERT, UPDATE, DELETE, JOINs, keys, constraints, data types",
+                "lectures": ["lab1b", "lab2", "lab3", "lab4", "lab5"]
+            },
+            "postgis": {
+                "name": "PostGIS & Spatial SQL",
+                "description": "Spatial functions, geometry operations, coordinate transforms, pgRouting",
+                "lectures": ["lab7", "lab8", "lab9", "lab10"]
+            }
+        }
     }
 }
 
