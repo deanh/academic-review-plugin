@@ -7,8 +7,7 @@ Type=simple
 User=www-data
 Group=www-data
 WorkingDirectory=/var/www/quizzes
-Environment="PATH=/var/www/quizzes/venv/bin"
-ExecStart=/var/www/quizzes/venv/bin/python server.py
+ExecStart=/var/www/quizzes/.venv/bin/python server/server.py
 Restart=always
 RestartSec=5
 
@@ -20,7 +19,7 @@ StandardError=append:/var/log/quiz-server/error.log
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ReadWritePaths=/var/www/quizzes/results /var/www/quizzes/data
+ReadWritePaths=/var/www/quizzes/server/results /var/www/quizzes/server/data /var/www/quizzes/server/.secret_key
 
 [Install]
 WantedBy=multi-user.target
@@ -30,13 +29,11 @@ WantedBy=multi-user.target
 #      sudo mkdir -p /var/log/quiz-server
 #      sudo chown www-data:www-data /var/log/quiz-server
 #
-#   2. Set up Python venv on server:
-#      cd /var/www/quizzes
-#      python3 -m venv venv
-#      ./venv/bin/pip install flask
+#   2. Install deps (from /var/www/quizzes):
+#      uv sync --no-group dev
 #
 #   3. Install and enable service:
-#      sudo cp quiz-server.service /etc/systemd/system/
+#      sudo cp server/deploy/quiz-server.service /etc/systemd/system/
 #      sudo systemctl daemon-reload
 #      sudo systemctl enable quiz-server
 #      sudo systemctl start quiz-server
