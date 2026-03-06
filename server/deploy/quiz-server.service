@@ -20,6 +20,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ReadWritePaths=/var/www/quizzes/server/results /var/www/quizzes/server/data /var/www/quizzes/server/.secret_key
+ReadOnlyPaths=/root/.local/share/uv/python
 
 [Install]
 WantedBy=multi-user.target

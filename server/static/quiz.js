@@ -250,7 +250,8 @@ class Quiz {
 
         try {
             // Use new unified submit endpoint
-            const response = await fetch('/quiz/submit', {
+            const submitUrl = (typeof BASE_URL !== 'undefined' ? BASE_URL : '') + '/quiz/submit';
+            const response = await fetch(submitUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(submitData)

@@ -6,10 +6,10 @@
 # If username is provided, only sync that user's results.
 # Otherwise, sync all users.
 
-# Configuration - UPDATE THESE VALUES
-SERVER_USER="your-username"
-SERVER_HOST="your-server.com"
-REMOTE_PATH="/var/www/quizzes/results/"
+# Configuration
+SERVER_USER="root"
+SERVER_HOST="hdh.me"
+REMOTE_PATH="/var/www/quizzes/server/results/"
 
 # Local paths
 LOCAL_RESULTS=".cache/quiz-results/"

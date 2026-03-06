@@ -2,13 +2,13 @@
 # Sync quizzes from local to server
 # Usage: ./scripts/sync_quizzes.sh
 
-# Configuration - UPDATE THESE VALUES
-SERVER_USER="your-username"
-SERVER_HOST="your-server.com"
-REMOTE_PATH="/var/www/quizzes/data/"
+# Configuration
+SERVER_USER="root"
+SERVER_HOST="hdh.me"
+REMOTE_PATH="/var/www/quizzes/server/data/"
 
 # Local paths
-LOCAL_QUIZZES=".cache/web-quizzes/"
+LOCAL_QUIZZES="server/data/"
 
 # Check if local directory exists
 if [ ! -d "$LOCAL_QUIZZES" ]; then

@@ -54,6 +54,7 @@
     <script>
         // Quiz data from server
         const quizData = {{ quiz | tojson | safe }};
+        const BASE_URL = {{ request.script_root | tojson | safe }};
     </script>
     <script src="{{ url_for('static', filename='quiz.js') }}"></script>
 </body>
