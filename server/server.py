@@ -194,6 +194,68 @@ COURSES = {
                 "lectures": ["lab7", "lab8", "lab9", "lab10"]
             }
         }
+    },
+    "gis": {
+        "name": "Geoinformatics (GIS)",
+        "short_name": "GIS",
+        "description": "TU Berlin Geoinformatics - modeling, topology, graph algorithms, spatial data structures",
+        "topics": {
+            "introduction": {
+                "name": "Introduction to Geoinformatics",
+                "description": "Geo data, GIS definition (IMAP), 4-component model, types of GIS",
+                "lectures": ["gis01"]
+            },
+            "thematic_modeling": {
+                "name": "Thematic Modeling",
+                "description": "Data models vs structures, discrete objects vs continuous fields, layer vs object class principle",
+                "lectures": ["gis02"]
+            },
+            "geometric_modeling": {
+                "name": "Geometric Modeling",
+                "description": "Point sets, raster vs vector, BREP, georeferencing, H3 index, raster/vector comparison",
+                "lectures": ["gis03"]
+            },
+            "spatial_overlays": {
+                "name": "Spatial Overlays",
+                "description": "Point-in-polygon test, Margalit-Knott boolean operations, Map Algebra (local/focal/zonal)",
+                "lectures": ["gis04"]
+            },
+            "topological_data_structures": {
+                "name": "Topological Data Structures",
+                "description": "Connectivity, adjacency, containment, polygon/vertex/edge boundary models, winged-edge data structure",
+                "lectures": ["gis05"]
+            },
+            "topological_modeling": {
+                "name": "Topological Modeling & Graph Theory",
+                "description": "Graphs, paths, cycles, Eulerian/Hamiltonian paths, planar and connected graphs",
+                "lectures": ["gis06"]
+            },
+            "graph_traversal": {
+                "name": "Graph Traversal (DFS & BFS)",
+                "description": "Depth-first search, breadth-first search, spanning trees, recursive vs iterative algorithms",
+                "lectures": ["gis08"]
+            },
+            "dijkstra": {
+                "name": "Dijkstra's Shortest Path Algorithm",
+                "description": "Weighted graphs, distance relaxation, priority queue, single-source/single-pair shortest paths",
+                "lectures": ["gis09"]
+            },
+            "minimum_spanning_trees": {
+                "name": "Minimum Spanning Trees (Kruskal)",
+                "description": "Kruskal's algorithm, union-find with path compression, subgraphs, forests, connected components",
+                "lectures": ["gis10a"]
+            },
+            "search_trees": {
+                "name": "Search Trees (BST & 2-3 Trees)",
+                "description": "Binary search trees, insertion/deletion, balanced trees, 2-3 search trees with node splitting",
+                "lectures": ["gis10b"]
+            },
+            "kd_tree": {
+                "name": "KD-Tree",
+                "description": "Multi-dimensional search, alternating splits, median partitioning, window queries",
+                "lectures": ["gis11"]
+            }
+        }
     }
 }
 
