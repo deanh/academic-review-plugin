@@ -10,25 +10,67 @@ Supports:
 - Offline caching per course
 """
 
+import functools
 import json
 import random
+import secrets
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
-from flask import Flask, jsonify, render_template, request, abort, redirect, url_for
+from flask import Flask, jsonify, render_template, request, abort, redirect, url_for, session
+from werkzeug.security import check_password_hash
 
 app = Flask(__name__)
+
+# Secret key for session signing
+SECRET_KEY_FILE = Path(__file__).parent / ".secret_key"
+if SECRET_KEY_FILE.exists():
+    app.secret_key = SECRET_KEY_FILE.read_text().strip()
+else:
+    # Generate and persist a secret key on first run
+    app.secret_key = secrets.token_hex(32)
+    SECRET_KEY_FILE.write_text(app.secret_key)
+
+app.permanent_session_lifetime = timedelta(days=30)
 
 # Configuration
 DATA_DIR = Path(__file__).parent / "data"
 QUESTIONS_DIR = DATA_DIR / "questions"
 RESULTS_DIR = Path(__file__).parent / "results"
+USERS_FILE = Path(__file__).parent / "users.json"
 
 # Ensure directories exist
 DATA_DIR.mkdir(exist_ok=True)
 QUESTIONS_DIR.mkdir(exist_ok=True)
 RESULTS_DIR.mkdir(exist_ok=True)
+
+
+# --- Authentication ---
+
+def load_users() -> dict:
+    """Load user credentials from users.json."""
+    if USERS_FILE.exists():
+        with open(USERS_FILE) as f:
+            return json.load(f)
+    return {}
+
+
+def login_required(f):
+    """Decorator to require authentication."""
+    @functools.wraps(f)
+    def decorated(*args, **kwargs):
+        if "user" not in session:
+            return redirect(url_for("login"))
+        return f(*args, **kwargs)
+    return decorated
+
+
+def get_user_results_dir(username: str) -> Path:
+    """Get the results directory for a specific user."""
+    user_dir = RESULTS_DIR / username
+    user_dir.mkdir(exist_ok=True)
+    return user_dir
 
 # Course and topic metadata
 COURSES = {
@@ -195,21 +237,22 @@ def get_courses_with_counts() -> list:
     return courses
 
 
-def get_best_scores_for_course(course_id: str) -> dict:
-    """Get best score per topic from results files.
+def get_best_scores_for_course(course_id: str, username: str) -> dict:
+    """Get best score per topic from a user's results files.
 
     Returns dict mapping topic_id -> {score, total, percentage, attempts}
     """
     best_scores = {}
 
-    if not RESULTS_DIR.exists():
+    user_dir = RESULTS_DIR / username
+    if not user_dir.exists():
         return best_scores
 
     # Get valid topic IDs for this course
     course = COURSES.get(course_id, {})
     valid_topics = set(course.get("topics", {}).keys())
 
-    for result_file in RESULTS_DIR.glob("*_result.json"):
+    for result_file in user_dir.glob("*_result.json"):
         try:
             with open(result_file) as f:
                 result = json.load(f)
@@ -268,7 +311,7 @@ def get_best_scores_for_course(course_id: str) -> dict:
     return best_scores
 
 
-def store_offline_result(data: dict):
+def store_offline_result(data: dict, username: str):
     """Store an offline quiz result without scoring (no server-side quiz file)."""
     result = {
         "quiz_id": data["quiz_id"],
@@ -285,8 +328,9 @@ def store_offline_result(data: dict):
         "percentage": None
     }
 
-    # Save result
-    result_file = RESULTS_DIR / f"{data['quiz_id']}_result.json"
+    # Save result to user directory
+    user_dir = get_user_results_dir(username)
+    result_file = user_dir / f"{data['quiz_id']}_result.json"
     with open(result_file, "w") as f:
         json.dump(result, f, indent=2)
 
@@ -325,17 +369,45 @@ def strip_answers(questions: list) -> list:
 
 # Routes
 
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    """Login page."""
+    if "user" in session:
+        return redirect(url_for("index"))
+
+    error = None
+    if request.method == "POST":
+        username = request.form.get("username", "").strip().lower()
+        password = request.form.get("password", "")
+        users = load_users()
+
+        if username in users and check_password_hash(users[username], password):
+            session.permanent = True
+            session["user"] = username
+            return redirect(url_for("index"))
+        else:
+            error = "Invalid username or password."
+
+    return render_template("login.html", error=error)
+
+
+@app.route("/logout")
+def logout():
+    """Clear session and redirect to login."""
+    session.clear()
+    return redirect(url_for("login"))
+
+
 @app.route("/")
+@login_required
 def index():
     """Home page - list of courses."""
     courses = get_courses_with_counts()
-    # If only one course, redirect directly to it
-    if len(courses) == 1:
-        return redirect(url_for('course_home', course_id=courses[0]['id']))
     return render_template("index.html", courses=courses)
 
 
 @app.route("/course/<course_id>")
+@login_required
 def course_home(course_id: str):
     """Course home page with quick quiz and topic list."""
     if course_id not in COURSES:
@@ -344,7 +416,7 @@ def course_home(course_id: str):
     course = COURSES[course_id]
     topics = get_topics_with_counts(course_id)
     total_questions = get_total_question_count(course_id)
-    best_scores = get_best_scores_for_course(course_id)
+    best_scores = get_best_scores_for_course(course_id, session["user"])
 
     # Add best score info to each topic
     for topic in topics:
@@ -359,6 +431,7 @@ def course_home(course_id: str):
 
 
 @app.route("/course/<course_id>/quick")
+@login_required
 def quick_quiz(course_id: str):
     """Start a quick quiz with random questions from a course."""
     if course_id not in COURSES:
@@ -394,8 +467,9 @@ def quick_quiz(course_id: str):
         "questions": strip_answers(selected)
     }
 
-    # Store the full quiz with answers for scoring
-    quiz_file = RESULTS_DIR / f"{quiz_id}_quiz.json"
+    # Store the full quiz with answers for scoring in user directory
+    user_dir = get_user_results_dir(session["user"])
+    quiz_file = user_dir / f"{quiz_id}_quiz.json"
     with open(quiz_file, "w") as f:
         json.dump({"id": quiz_id, "course": course_id, "questions": selected}, f)
 
@@ -403,6 +477,7 @@ def quick_quiz(course_id: str):
 
 
 @app.route("/course/<course_id>/topic/<topic_id>")
+@login_required
 def topic_quiz(course_id: str, topic_id: str):
     """Start a quiz with all questions for a topic."""
     if course_id not in COURSES:
@@ -425,8 +500,9 @@ def topic_quiz(course_id: str, topic_id: str):
         "questions": strip_answers(questions)
     }
 
-    # Store the full quiz with answers for scoring
-    quiz_file = RESULTS_DIR / f"{quiz_id}_quiz.json"
+    # Store the full quiz with answers for scoring in user directory
+    user_dir = get_user_results_dir(session["user"])
+    quiz_file = user_dir / f"{quiz_id}_quiz.json"
     with open(quiz_file, "w") as f:
         json.dump({"id": quiz_id, "course": course_id, "questions": questions}, f)
 
@@ -434,6 +510,7 @@ def topic_quiz(course_id: str, topic_id: str):
 
 
 @app.route("/quiz/submit", methods=["POST"])
+@login_required
 def submit_quiz():
     """Submit quiz answers and return results."""
     data = request.get_json()
@@ -441,12 +518,14 @@ def submit_quiz():
         abort(400, description="Invalid submission")
 
     quiz_id = data["quiz_id"]
+    username = session["user"]
+    user_dir = get_user_results_dir(username)
 
-    # Load the stored quiz with answers
-    quiz_file = RESULTS_DIR / f"{quiz_id}_quiz.json"
+    # Load the stored quiz with answers from user directory
+    quiz_file = user_dir / f"{quiz_id}_quiz.json"
     if not quiz_file.exists():
         # This might be an offline submission - store without scoring
-        return store_offline_result(data)
+        return store_offline_result(data, username)
 
     with open(quiz_file) as f:
         quiz = json.load(f)
@@ -509,8 +588,8 @@ def submit_quiz():
     result["total_time_sec"] = data.get("total_time_sec", 0)
     result["percentage"] = round(result["score"] / result["total"] * 100) if result["total"] > 0 else 0
 
-    # Save result
-    result_file = RESULTS_DIR / f"{quiz_id}_result.json"
+    # Save result to user directory
+    result_file = user_dir / f"{quiz_id}_result.json"
     with open(result_file, "w") as f:
         json.dump(result, f, indent=2)
 
@@ -537,12 +616,14 @@ def submit_quiz():
 # API endpoints
 
 @app.route("/api/courses")
+@login_required
 def api_courses():
     """API endpoint to list courses."""
     return jsonify(get_courses_with_counts())
 
 
 @app.route("/api/course/<course_id>/topics")
+@login_required
 def api_topics(course_id: str):
     """API endpoint to list topics for a course."""
     if course_id not in COURSES:
@@ -551,6 +632,7 @@ def api_topics(course_id: str):
 
 
 @app.route("/api/course/<course_id>/questions/all")
+@login_required
 def api_all_questions(course_id: str):
     """API endpoint to get all questions for a course (for offline caching)."""
     if course_id not in COURSES:
@@ -585,6 +667,7 @@ def api_all_questions(course_id: str):
 
 
 @app.route("/api/course/<course_id>/questions/<topic_id>")
+@login_required
 def api_topic_questions(course_id: str, topic_id: str):
     """API endpoint to get questions for a specific topic."""
     if course_id not in COURSES:

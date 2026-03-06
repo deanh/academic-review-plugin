@@ -70,7 +70,17 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-## Local Setup
+## Local Development
+
+Install all dependencies into a single venv (from the project root):
+```bash
+uv sync --group dev
+```
+
+Run the server locally:
+```bash
+uv run python server/server.py
+```
 
 ### Configure sync scripts
 

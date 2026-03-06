@@ -8,6 +8,10 @@
 </head>
 <body>
     <div class="container">
+        <div class="user-bar">
+            <span class="username">{{ session.user }}</span>
+            <a href="{{ url_for('logout') }}" class="logout-link">Sign out</a>
+        </div>
         <header>
             <h1>{{ course.short_name }} Exam Prep</h1>
             <p class="subtitle">{{ total_questions }} questions across {{ topics|length }} topics</p>

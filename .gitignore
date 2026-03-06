@@ -28,3 +28,10 @@ __pycache__/
 .DS_Store
 
 server/data/
+server/users.json
+server/.secret_key
+server/results/
+*.jpeg
+*.jpg
+*.png
+main.py

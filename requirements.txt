@@ -1,2 +1,0 @@
-# Academic Review Plugin Dependencies
-marker-pdf>=0.2.0
