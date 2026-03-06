@@ -19,9 +19,11 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request, abort, redirect, url_for, session
+from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash
 
 app = Flask(__name__)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_prefix=1)
 
 # Secret key for session signing
 SECRET_KEY_FILE = Path(__file__).parent / ".secret_key"
