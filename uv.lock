@@ -1093,33 +1093,29 @@ wheels = [
 name = "reviewbot"
 version = "0.1.0"
 source = { virtual = "." }
+dependencies = [
+    { name = "flask" },
+]
 
 [package.optional-dependencies]
 extraction = [
     { name = "marker-pdf" },
 ]
-server = [
-    { name = "flask" },
-]
 
 [package.dev-dependencies]
 dev = [
-    { name = "flask" },
     { name = "marker-pdf" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "flask", marker = "extra == 'server'", specifier = ">=3.0" },
+    { name = "flask", specifier = ">=3.0" },
     { name = "marker-pdf", marker = "extra == 'extraction'", specifier = ">=0.2.0" },
 ]
-provides-extras = ["server", "extraction"]
+provides-extras = ["extraction"]
 
 [package.metadata.requires-dev]
-dev = [
-    { name = "flask", specifier = ">=3.0" },
-    { name = "marker-pdf", specifier = ">=0.2.0" },
-]
+dev = [{ name = "marker-pdf", specifier = ">=0.2.0" }]
 
 [[package]]
 name = "rsa"
