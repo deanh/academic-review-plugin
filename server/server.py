@@ -256,6 +256,88 @@ COURSES = {
                 "lectures": ["gis11"]
             }
         }
+    },
+    "space_geodesy": {
+        "name": "Introduction to Space Geodesy",
+        "short_name": "ISG",
+        "description": "TU Berlin Space Geodesy - reference systems, Earth orientation, GNSS, orbits, gravity, tracking techniques",
+        "topics": {
+            "reference_systems": {
+                "name": "Concept of Reference Systems",
+                "description": "Coordinate systems, reference systems/frames, ICRS, ITRS, GCRS, WGS84, ellipsoidal coordinates, transformations",
+                "lectures": ["isg02"]
+            },
+            "earth_orientation": {
+                "name": "Earth Orientation",
+                "description": "Precession, nutation, polar motion, EOP, rotation matrices, GCRS↔ITRS transformation",
+                "lectures": ["isg03"]
+            },
+            "gnss_fundamentals": {
+                "name": "GNSS: Part 1 — Fundamentals",
+                "description": "Trilateration, pseudorange, carrier phase, integer ambiguity, code vs carrier, signal modulation",
+                "lectures": ["isg04"]
+            },
+            "gnss_signals_errors": {
+                "name": "GNSS: Part 2 — Signals & Errors",
+                "description": "L1/L2/L5 frequencies, C/A and P-code, ionosphere, troposphere, multipath, DOP, IGS, ITRF",
+                "lectures": ["isg05"]
+            },
+            "gnss_remote_sensing": {
+                "name": "GNSS Remote Sensing",
+                "description": "Atmospheric sounding, TEC, IWV, radio occultation, reflectometry, SBAS",
+                "lectures": ["isg06"]
+            },
+            "satellite_orbits": {
+                "name": "Satellite Orbits",
+                "description": "Gravity, Kepler's laws, orbital elements, LEO/MEO/GEO, escape velocity, energy conservation",
+                "lectures": ["isg07"]
+            },
+            "numerical_integration": {
+                "name": "Numerical Integration of Orbits",
+                "description": "Euler method, Runge-Kutta (RK4), multistep methods, predictor-corrector, orbit interpolation",
+                "lectures": ["isg08"]
+            },
+            "spherical_harmonics": {
+                "name": "Spherical Harmonics",
+                "description": "Gravitational potential, Laplace equation, geoid, SH coefficients, degree/order, C₂₀",
+                "lectures": ["isg09"]
+            },
+            "slr_prare_doris": {
+                "name": "SLR, PRARE, DORIS",
+                "description": "Satellite Laser Ranging, retroreflectors, LAGEOS, LLR, PRARE, DORIS, non-gravitational forces",
+                "lectures": ["isg10"]
+            },
+            "vlbi": {
+                "name": "VLBI",
+                "description": "Very Long Baseline Interferometry, quasar observations, baseline determination, UT1, ICRF",
+                "lectures": ["isg11"]
+            },
+            "ggos": {
+                "name": "IAG GGOS",
+                "description": "Global Geodetic Observing System, technique combination, reference frame accuracy, IERS",
+                "lectures": ["isg12"]
+            },
+            "altimetry": {
+                "name": "Satellite Altimetry",
+                "description": "Radar altimetry, waveforms, sea surface height, MSL, geostrophic currents, CryoSat, multi-mission",
+                "lectures": ["isg13"]
+            },
+            "orbit_perturbations": {
+                "name": "Orbit Perturbations",
+                "description": "J₂ effect, nodal regression, sun-synchronous orbits, atmospheric drag, solar radiation pressure",
+                "lectures": ["isg14"]
+            },
+            "gravity_missions": {
+                "name": "Satellite Gravity Missions",
+                "description": "CHAMP (HL-SST), GRACE (LL-SST), GOCE (gradiometry), time-variable gravity, ice mass loss",
+                "lectures": ["isg15"]
+            },
+            "navigation": {
+                "name": "Introduction to Navigation",
+                "description": "Position fixing, dead reckoning, celestial navigation, A-GPS",
+                "lectures": ["isg16"]
+            }
+        }
     }
 }
 
